@@ -1,0 +1,3169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Qber | Financial Curve Analysis</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+.analysis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(500px,1fr));gap:20px;margin-bottom:20px;}
+.chart-card{background:#fff;padding:15px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1);border-top:3px solid #666;height:auto;display:flex;flex-direction:column;}
+.analysis-grid .chart-card{min-height:38vh;}
+.js-plotly-plot{flex-grow:1;width:100%;min-height:0;}
+.chart-card.full-width{grid-column:1/-1;}
+/* ── Matrix layout – fully fluid, ratio-preserved across all screen sizes ─────
+   Uses vmin so all three panels (Select Quadrant | Viz+Total | Simulation)
+   grow/shrink together at the same ratio regardless of device. */
+.matrix-layout{display:flex;gap:1.5vw;align-items:stretch;margin-bottom:40px;height:clamp(440px,60vmin,740px);}
+.viz-split-container{display:flex;flex:1;gap:1.2vw;min-width:0;height:100%;}
+/* Left viz column: KPI bar is fixed height, chart fills the rest */
+.viz-left-col{flex:1;display:flex;flex-direction:column;min-width:0;height:100%;overflow:hidden;}
+.viz-right-col{width:clamp(210px,20vw,310px);flex-shrink:0;height:100%;display:flex;flex-direction:column;}
+/* Total KPI bar – always visible, never clipped */
+.quadrant-kpi-bar{flex-shrink:0;min-height:36px;display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;background:#fff;padding:6px 14px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:8px;border-left:4px solid var(--primary-red);border-right:4px solid var(--primary-red);overflow:hidden;box-sizing:border-box;width:100%;}
+/* Chart card fills remaining height after the KPI bar */
+.flex-col-full{flex:1;min-height:0;margin-bottom:0;display:flex;flex-direction:column;overflow:hidden;}
+.chart-inner-fill{flex:1;min-height:0;width:100%;}
+.sim-main-card{background:#fff;padding:20px 15px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.1);border-top:4px solid #28a745;animation:fadeIn .3s ease-in;width:100%;box-sizing:border-box;display:flex;flex-direction:column;flex:1;overflow-y:auto;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.sim-header{font-size:1rem;font-weight:800;color:#333;text-transform:uppercase;text-align:center;border-bottom:2px solid #eee;padding-bottom:10px;margin-bottom:15px;flex-shrink:0;}
+.sim-quad-name{font-size:1.1rem;font-weight:700;color:#2c3e50;text-align:center;background:#f8f9fa;padding:8px;border-radius:4px;border:1px solid #e9ecef;margin-bottom:10px;}
+.sim-selections-list{max-height:200px;overflow-y:auto;margin-bottom:15px;border:1px solid #e9ecef;border-radius:4px;background:#fafafa;}
+.selection-item{padding:8px 10px;border-bottom:1px solid #e9ecef;display:flex;justify-content:space-between;align-items:center;cursor:pointer;transition:background .2s;}
+.selection-item:last-child{border-bottom:none;}
+.selection-item:hover{background:#f0f0f0;}
+.selection-item.highlighted{background:#fff3cd;border-left:3px solid #ffc107;}
+.selection-info{flex:1;}
+.selection-label{font-size:.75rem;font-weight:700;color:#333;}
+.selection-count{font-size:.65rem;color:#666;margin-top:2px;}
+.selection-remove{background:#dc3545;color:#fff;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:.65rem;font-weight:600;transition:background .2s;}
+.selection-remove:hover{background:#c82333;}
+.sim-input-group{display:flex;flex-direction:column;gap:8px;margin-bottom:20px;border-bottom:1px solid #eee;padding-bottom:20px;flex-shrink:0;}
+.sim-input-group label{font-size:.8rem;font-weight:600;color:#555;text-transform:uppercase;}
+.sim-input-row{display:flex;gap:5px;}
+.sim-input-row input{flex:1;padding:8px;border:1px solid #ccc;border-radius:4px;text-align:center;font-weight:bold;}
+.sim-btn{padding:8px 12px;background:#333;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;transition:background .2s;}
+.sim-btn:hover{background:#555;}
+.sim-results-container{display:flex;flex-direction:column;gap:15px;margin-top:10px;flex-shrink:0;}
+.sim-metric-row{display:flex;flex-direction:column;gap:2px;}
+.sim-metric-label{font-size:.7rem;font-weight:600;color:#666;text-transform:uppercase;}
+.sim-metric-val{font-size:1.1rem;font-weight:800;color:#2c3e50;}
+.sim-metric-val.highlight{color:#28a745;}
+.net-increase-block{margin-top:10px;padding-top:10px;border-top:2px solid #ccc;display:flex;flex-direction:column;gap:4px;}
+.net-increase-title{font-size:.85rem;font-weight:800;color:#333;text-transform:uppercase;}
+.net-increase-val{font-size:1.3rem;font-weight:900;color:#28a745;}
+/* Scorecard shared cell styles */
+.sc-th{border:1px solid #999;padding:5px 8px;font-weight:600;}
+.sc-td{border:1px solid #000;padding:8px;}
+.sc-td-r{border:1px solid #000;padding:8px;text-align:right;}
+.sc-td-c{border:1px solid #000;padding:8px;text-align:center;}
+/* Popup detail table */
+.detail-table thead th{position:sticky;top:0;z-index:3;background:#8B0000;color:#fff;padding:8px;font-size:.78rem;white-space:nowrap;border-bottom:2px solid #6b0000;text-align:right;}
+.detail-table thead th:first-child{text-align:left;position:sticky;left:0;top:0;z-index:4;background:#8B0000;}
+.detail-table tbody td{vertical-align:middle;font-size:.8rem;}
+.table-popup{position:relative;}
+.summary-view-section .chart-card{min-height:unset !important;}
+.whale-chart-div{width:100%;height:420px;flex-shrink:0;}
+.bu-chart-card{border:1px solid #ddd;border-radius:6px;padding:10px;background:#fff;box-sizing:border-box;min-width:0;overflow:visible;}
+.bu-chart-title{text-align:center;color:#8B0000;font-size:.9rem;margin:0 0 6px;font-weight:700;}
+.bu-wrapper-card{min-height:unset !important;height:auto !important;}
+.bu-grid-container{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;width:100%;box-sizing:border-box;}
+.bu-chart-inner{width:100%;aspect-ratio:16/9;min-height:160px;max-height:240px;box-sizing:border-box;height:180px;}
+.header-right{flex:1;min-width:0;display:flex;align-items:stretch;overflow:hidden;}
+/* Utility */
+.tc{text-align:center;} .tu{text-decoration:underline;}
+.intro-box{background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:20px;color:#333;line-height:1.8;}
+.intro-h2{color:var(--primary-red);border-bottom:2px solid var(--primary-red);padding-bottom:10px;font-family:'Didot',serif;font-size:1.8rem;}
+.intro-h3{font-size:1.2rem;color:#2c3e50;margin-bottom:10px;}
+.intro-section{margin-top:20px;}
+.view-select-bar{text-align:center;margin-bottom:30px;background:#f0f0f0;padding:15px;border-radius:8px;}
+.scorecard-table{width:50%;margin:20px auto;border-collapse:collapse;border:1px solid #999;}
+.scorecard-thead-row{background:#f0f0f0;}
+.whale-summary{padding:15px;background:#f9fafb;border-left:4px solid var(--primary-red);margin-top:15px;flex-shrink:0;}
+.chart-ht450{height:450px;width:100%;}
+.no-minheight{min-height:unset;}
+.popup-title{color:#8B0000;border-bottom:1px solid #ddd;padding-bottom:5px;margin-bottom:10px;}
+.popup-rowcount{font-size:.8rem;color:#666;margin-bottom:6px;}
+.popup-footer{margin-top:12px;text-align:right;border-top:1px solid #eee;padding-top:10px;}
+.close-dark{padding:8px 16px;background:#333;color:#fff;border:none;border-radius:4px;cursor:pointer;}
+
+/* ─── BU SUMMARIES ─────────────────────────────────────────────────────────── */
+.bu-summaries-container{margin-top:18px;display:flex;flex-direction:column;gap:12px;}
+.bu-summary-block{background:#f9fafb;border-left:4px solid #8B0000;border-radius:0 6px 6px 0;padding:12px 16px;}
+.bu-summary-block-title{font-size:.8rem;font-weight:800;color:#8B0000;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.bu-summary-block p{margin:0;font-size:.88rem;line-height:1.7;color:#374151;text-align:justify;}
+
+/* ─── DOWNLOAD BAR ──────────────────────────────────────────────────────────── */
+.download-bar{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#8B0000 0%,#a52a2a 100%);border-radius:8px;padding:18px 24px;margin-top:20px;margin-bottom:10px;box-shadow:0 4px 14px rgba(139,0,0,.25);}
+.download-bar-label{color:#fff;font-size:.95rem;font-weight:600;letter-spacing:.3px;}
+.download-btn{background:#fff;color:#8B0000;border:none;padding:10px 22px;border-radius:6px;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .2s;box-shadow:0 2px 6px rgba(0,0,0,.15);}
+.download-btn:hover{background:#f8e8e8;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.2);}
+.download-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+
+/* ─── UPLOAD TAB ────────────────────────────────────────────────────────────── */
+.upload-page-wrapper{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:24px;padding:10px 0 40px;}
+.upload-header-card{background:#fff;border-radius:8px;padding:30px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.upload-hero-icon{font-size:3rem;color:var(--primary-red);margin-bottom:12px;}
+.upload-header-card h2{margin:0 0 8px;color:#333;font-size:1.5rem;}
+.upload-header-card p{margin:0;color:#666;font-size:.95rem;line-height:1.6;}
+.upload-zone-card{background:#fff;border-radius:8px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.upload-drop-zone{border:2px dashed #ccc;border-radius:8px;padding:40px 20px;text-align:center;transition:all .2s;cursor:pointer;}
+.upload-drop-zone:hover,.upload-drop-zone.dragover{border-color:var(--primary-red);background:#fef8f8;}
+.upload-drop-icon{font-size:2.5rem;color:#aaa;margin-bottom:12px;display:block;}
+.upload-drop-zone:hover .upload-drop-icon,.upload-drop-zone.dragover .upload-drop-icon{color:var(--primary-red);}
+.upload-drop-title{font-size:1.05rem;font-weight:600;color:#444;margin:0 0 4px;}
+.upload-drop-sub{font-size:.85rem;color:#999;margin:0 0 14px;}
+.upload-browse-btn{display:inline-block;background:var(--primary-red);color:#fff;padding:9px 22px;border-radius:6px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .2s;}
+.upload-browse-btn:hover{background:var(--hover-red);}
+.upload-drop-formats{margin-top:14px;font-size:.75rem;color:#bbb;}
+.upload-file-preview{margin-top:18px;border:1px solid #e9ecef;border-radius:6px;padding:14px 16px;background:#fafafa;}
+.upload-file-info{display:flex;align-items:center;gap:12px;}
+.upload-file-icon{font-size:2rem;color:#217346;}
+.upload-file-meta{flex:1;min-width:0;}
+.upload-file-name{font-weight:700;font-size:.95rem;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.upload-file-size{font-size:.78rem;color:#888;margin-top:2px;}
+.upload-remove-btn{background:none;border:1px solid #ccc;border-radius:4px;padding:6px 10px;cursor:pointer;color:#666;transition:.2s;}
+.upload-remove-btn:hover{background:#fce8e8;border-color:#dc3545;color:#dc3545;}
+.upload-progress-bar-wrap{height:6px;background:#e9ecef;border-radius:3px;margin-top:12px;overflow:hidden;}
+.upload-progress-bar{height:100%;background:var(--primary-red);border-radius:3px;width:0%;transition:width .3s;}
+.upload-status{margin-top:10px;font-size:.85rem;font-weight:600;}
+.upload-status.success{color:#137333;}
+.upload-status.error{color:#c5221f;}
+.upload-status.info{color:#555;}
+.upload-action-row{margin-top:16px;display:flex;justify-content:flex-end;}
+.upload-submit-btn{background:var(--primary-red);color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:.95rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .2s;}
+.upload-submit-btn:hover{background:var(--hover-red);}
+.upload-submit-btn:disabled{opacity:.6;cursor:not-allowed;}
+.upload-log-card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.upload-log-header{font-weight:700;font-size:.95rem;color:#333;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.upload-log-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;}
+.upload-log-item{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:4px;font-size:.83rem;}
+.upload-log-item.success{background:#e6f4ea;color:#137333;}
+.upload-log-item.error{background:#fce8e6;color:#c5221f;}
+.upload-log-item.info{background:#f0f4ff;color:#444;}
+.upload-log-item i{margin-top:1px;flex-shrink:0;}
+.upload-log-time{font-size:.72rem;opacity:.7;margin-left:auto;white-space:nowrap;}
+
+/* ─── BENCHMARKING TAB ──────────────────────────────────────────────────────── */
+.benchmarking-wrapper{max-width:800px;margin:0 auto;padding:10px 0 40px;display:flex;flex-direction:column;gap:24px;}
+.bench-header-card{background:#fff;border-radius:8px;padding:28px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.bench-header-card h2{margin:0 0 8px;font-size:1.5rem;color:#333;}
+.bench-header-card p{margin:0;color:#666;line-height:1.6;}
+.bench-coming-soon{background:#fff;border-radius:8px;padding:48px 32px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.bench-cs-icon{font-size:3.5rem;color:#ddd;margin-bottom:16px;display:block;}
+.bench-coming-soon h3{font-size:1.3rem;color:#555;margin:0 0 12px;}
+.bench-coming-soon p{color:#888;max-width:520px;margin:0 auto 28px;line-height:1.7;}
+.bench-feature-pills{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;}
+.bench-pill{background:#f8f9fa;border:1px solid #e0e0e0;border-radius:20px;padding:6px 16px;font-size:.82rem;font-weight:600;color:#555;display:flex;align-items:center;gap:6px;}
+.bench-pill i{color:var(--primary-red);}
+</style>
+</head>
+<body>
+<header class="main-header">
+    <div class="header-left">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Company Logo" class="header-logo" id="headerLogo"
+             onerror="this.style.display='none';document.getElementById('headerTitle').style.display='block';">
+        <h1 class="header-title" id="headerTitle">Qber</h1>
+
+    </div>
+    <div class="header-right">
+        <div class="header-filters" id="headerFilters"></div>
+    </div>
+</header>
+
+<div class="app-container">
+    <aside class="sidebar">
+    <nav class="nav-menu">
+        <div class="nav-group top">
+            <button class="nav-item active" onclick="openTab(event,'tab-cost')">
+                <i class="fa-solid fa-coins"></i> Cost Analysis
+            </button>
+            <button class="nav-item" onclick="openTab(event,'tab-profit')">
+                <i class="fa-solid fa-chart-line"></i> Profit Analysis
+            </button>
+            <button class="nav-item" onclick="openTab(event,'tab-epc')">
+                <i class="fa-solid fa-th"></i> Qber Matrix
+            </button>
+        </div>
+
+        <div class="nav-spacer-flex"></div>
+
+        <div class="nav-group center">
+    <button class="nav-item" onclick="openTab(event,'tab-prod-mix')">
+        <i class="fa-solid fa-layer-group"></i> Product Mix
+    </button>
+    <button class="nav-item" onclick="openTab(event,'tab-pricing')">
+        <i class="fa-solid fa-tags"></i> Pricing
+    </button>
+    <button class="nav-item" onclick="openTab(event,'tab-rca')">
+        <i class="fa-solid fa-magnifying-glass-chart"></i> RCA
+    </button>
+    <button class="nav-item" onclick="openTab(event,'tab-benchmarking')">
+        <i class="fa-solid fa-scale-balanced"></i> Benchmarking
+    </button>
+    <button class="nav-item" onclick="openTab(event,'tab-ask-qber')">
+        <i class="fa-solid fa-robot"></i> Ask QBER
+    </button>
+</div>
+
+        <div class="nav-spacer-flex"></div>
+
+        <div class="nav-group bottom">
+            <button class="nav-item" onclick="openTab(event,'tab-upload')">
+                <i class="fa-solid fa-upload"></i> Upload
+            </button>
+            <button class="nav-item" onclick="location.reload()">
+                <i class="fa-solid fa-sync"></i> Refresh
+            </button>
+            <button class="nav-item" onclick="openTab(event,'tab-execute')">
+                <i class="fa-solid fa-bolt"></i> Execute
+            </button>
+        </div>
+    </nav>
+</aside>
+
+    <main class="main-content">
+        <!-- GLOBAL QUARTER/MONTH FILTER BAR -->
+        <div id="global-analysis-filters" class="sticky-filters" style="display:none;">
+            <div class="filter-row-bottom">
+                <div class="sub-tab-container-inline" id="analysis-view-toggle" style="display:none;">
+                    <button class="sub-tab-btn active" onclick="openSubTab(event,'sub-customer')">Customer</button>
+                    <button class="sub-tab-btn" onclick="openSubTab(event,'sub-product')">Product</button>
+                </div>
+                <div class="filter-group horizontal quarter-group">
+                    <span class="filter-label" style="white-space:nowrap;margin-right:6px;">Quarter:</span>
+                    <div class="chip-container">
+                        <div class="filter-chip" data-quarter="Q1" onclick="toggleQuarter('Q1')">Q1</div>
+                        <div class="filter-chip" data-quarter="Q2" onclick="toggleQuarter('Q2')">Q2</div>
+                        <div class="filter-chip" data-quarter="Q3" onclick="toggleQuarter('Q3')">Q3</div>
+                        <div class="filter-chip" data-quarter="Q4" onclick="toggleQuarter('Q4')">Q4</div>
+                    </div>
+                </div>
+                <div class="filter-group horizontal month-group">
+                    <span class="filter-label" style="white-space:nowrap;margin-right:6px;">Month:</span>
+                    <div class="chip-container" id="monthChips"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SUMMARY TAB -->
+        <div id="tab-summary" class="tab-content" style="display:none;">
+            <div class="intro-box">
+                <h2 class="intro-h2">Understanding the Whale Curve</h2>
+                <div class="intro-section">
+                    <h3 class="intro-h3">What is the Whale Curve?</h3>
+                    <p>A Whale Curve is a powerful visualization of cumulative profitability that maps entities (products or customers) on the X-axis—ranked from the most profitable to the least profitable—against their cumulative contribution to total profit on the Y-axis. The resulting shape typically resembles a whale surfacing: a steep rise where a small group of high-performers generates the bulk of the profit, a peak that represents the maximum potential profit, and a subsequent decline as loss-making entities "bleed" the company's realized earnings back down to the final net profit figure reported on the P&L statement.</p>
+                </div>
+                <div class="intro-section">
+                    <h3 class="intro-h3">Why is the Whale Curve important?</h3>
+                    <p>Standard financial reports often mask the true drivers of value by aggregating winners and losers into a single number. The Whale Curve is critical because it exposes the "20-200 Rule"—the phenomenon where 20% of customers or products often generate 200% of the company's actual profit. It provides management with a clear roadmap for strategic intervention, highlighting exactly where complexity costs are destroying value and where the company is effectively subsidizing inefficient relationships or low-margin products with the profits from its "stars."</p>
+                </div>
+                <div class="intro-section">
+                    <h3 class="intro-h3">What does the Whale Curve imply for Qber?</h3>
+                    <p>For Qber, this analysis serves as a strategic call to action. A curve that drops significantly after its peak implies that the organization is over-extended, serving segments that do not cover their own activity-based costs. The implications are clear: the company can significantly increase its total profitability—often while reducing its operational footprint—by either aggressively managing the costs associated with loss-makers, adjusting pricing to reflect true service costs, or selectively pruning segments that offer no path to future profitability.</p>
+                </div>
+            </div>
+
+            <div class="view-select-bar">
+                <h3 style="margin-bottom:15px;">Select Analysis View</h3>
+                <div class="sub-tab-container-inline" style="justify-content:center;display:inline-flex;">
+                    <button class="sub-tab-btn active" id="btnShowProduct" onclick="toggleSummaryView('product')">Product View</button>
+                    <button class="sub-tab-btn" id="btnShowCustomer" onclick="toggleSummaryView('customer')">Customer View</button>
+                </div>
+            </div>
+
+            <!-- Reusable scorecard+whale pattern for product & customer -->
+            <div id="view-product" class="summary-view-section">
+                <div class="chart-card">
+                    <h3 class="tc tu">Product Reveal Scorecard</h3>
+                    <table class="scorecard-table">
+                        <thead><tr class="scorecard-thead-row"><th class="sc-th">Particulars</th><th class="sc-th">Count</th><th class="sc-th">Profit</th><th class="sc-th">%</th></tr></thead>
+                        <tbody id="productScorecardBody"></tbody>
+                    </table>
+                </div>
+                <div class="chart-card no-minheight">
+                    <h3 class="tc" style="margin-bottom:10px;">Product Wise Profit Whale Curve</h3>
+                    <div id="productWhaleCurve" class="whale-chart-div"></div>
+                    <div id="productWhaleSummary" class="whale-summary"></div>
+                </div>
+                <div class="chart-card bu-wrapper-card">
+                    <h3 class="tc">BU-wise Product EBIT Whale Curves</h3>
+                    <div id="buWhaleCurvesContainer" class="bu-grid-container"></div>
+                    <div id="buProductSummariesContainer" class="bu-summaries-container"></div>
+                </div>
+                <!-- Download bar — auto-captures all sections in this view -->
+                <div class="download-bar" id="downloadBarProduct">
+                    <span class="download-bar-label"><i class="fa-solid fa-file-arrow-down"></i> Download this report</span>
+                    <button class="download-btn" onclick="downloadViewPDF('product')">
+                        <i class="fa-solid fa-spinner fa-spin" style="display:none;" id="dlSpinProduct"></i>
+                        <i class="fa-solid fa-download" id="dlIconProduct"></i>
+                        &nbsp;Download Product Summary PDF
+                    </button>
+                </div>
+            </div>
+
+            <div id="view-customer" class="summary-view-section" style="display:none;">
+                <div class="chart-card">
+                    <h3 class="tc tu">Customer Reveal Scorecard</h3>
+                    <table class="scorecard-table">
+                        <thead><tr class="scorecard-thead-row"><th class="sc-th">Particulars</th><th class="sc-th">Count</th><th class="sc-th">Profit</th><th class="sc-th">%</th></tr></thead>
+                        <tbody id="customerScorecardBody"></tbody>
+                    </table>
+                </div>
+                <div class="chart-card no-minheight">
+                    <h3 class="tc" style="margin-bottom:10px;">Customer Wise Profit Whale Curve</h3>
+                    <div id="customerWhaleCurve" class="whale-chart-div"></div>
+                    <div id="customerWhaleSummary" class="whale-summary"></div>
+                </div>
+                <div class="chart-card bu-wrapper-card">
+                    <h3 class="tc">BU-wise Customer EBIT Whale Curves</h3>
+                    <div id="buCustomerWhaleCurvesContainer" class="bu-grid-container"></div>
+                    <div id="buCustomerSummariesContainer" class="bu-summaries-container"></div>
+                </div>
+                <!-- Download bar — auto-captures all sections in this view -->
+                <div class="download-bar" id="downloadBarCustomer">
+                    <span class="download-bar-label"><i class="fa-solid fa-file-arrow-down"></i> Download this report</span>
+                    <button class="download-btn" onclick="downloadViewPDF('customer')">
+                        <i class="fa-solid fa-spinner fa-spin" style="display:none;" id="dlSpinCustomer"></i>
+                        <i class="fa-solid fa-download" id="dlIconCustomer"></i>
+                        &nbsp;Download Customer Summary PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- EPC TAB -->
+        <div id="tab-epc" class="tab-content" style="display:none;">
+
+            <!-- Customer Sub-tab -->
+            <div id="sub-customer" class="sub-tab-content" style="display:block;">
+                <div class="chart-card">
+                    <div class="chart-controls">
+                        <div class="chart-title" id="custCurveTitle" style="color:#333;">Customer Wise Profit Whale Curve</div>
+                        <div style="display:flex;align-items:center;gap:5px;">
+                            <div style="width:250px;"><select id="customerDrilldownSelect" class="chart-filter-select"><option value="All">View: All Customers</option></select></div>
+                            <button class="reset-btn" onclick="resetDrilldown('customer')" title="Revert"><i class="fa-solid fa-rotate-left"></i></button>
+                        </div>
+                    </div>
+                    <div id="customerChart" class="chart-ht450"></div>
+                    <div class="chart-hint-visible"><i class="fa-solid fa-hand-pointer"></i> Click on a customer to see its product breakdown</div>
+                </div>
+                <h2 class="section-divider">QBER Cost Matrix (Customer View)</h2>
+                <div class="matrix-layout" id="matrixLayoutCust"></div>
+            </div>
+
+            <!-- Product Sub-tab -->
+            <div id="sub-product" class="sub-tab-content" style="display:none;">
+                <div class="chart-card">
+                    <div class="chart-controls">
+                        <div class="chart-title" id="prodCurveTitle" style="color:#333;">Product Wise Profit Whale Curve</div>
+                        <div style="display:flex;align-items:center;gap:5px;">
+                            <div style="width:250px;"><select id="productDrilldownSelect" class="chart-filter-select"><option value="All">View: All Products</option></select></div>
+                            <button class="reset-btn" onclick="resetDrilldown('product')" title="Revert"><i class="fa-solid fa-rotate-left"></i></button>
+                        </div>
+                    </div>
+                    <div id="productChart" class="chart-ht450"></div>
+                    <div class="chart-hint-visible"><i class="fa-solid fa-hand-pointer"></i> Click on a product to see its customer breakdown</div>
+                </div>
+                <h2 class="section-divider">QBER Cost Matrix (Product View)</h2>
+                <div class="matrix-layout" id="matrixLayoutProd"></div>
+            </div>
+        </div>
+
+        <!-- OTHER TABS -->
+        <div id="tab-cost" class="tab-content" style="display:block;">
+            <div class="page-header">
+                <div>
+                    <div class="page-title"><span class="page-title-dot"></span> Cost Analysis</div>
+                    <div class="page-subtitle">Direct cost, fixed cost, inventory &amp; stock ageing overview</div>
+                </div>
+            </div>
+            <div class="kpi-row" id="costKpiRow"></div>
+            <div class="analysis-grid" id="costGrid"></div>
+        </div>
+        <div id="tab-profit" class="tab-content">
+            <div class="page-header">
+                <div>
+                    <div class="page-title"><span class="page-title-dot"></span> Profit Analysis</div>
+                    <div class="page-subtitle">EBIT performance by month, plant, BU and segment</div>
+                </div>
+            </div>
+            <div class="kpi-row" id="profKpiRow"></div>
+            <div class="analysis-grid" id="profitGrid"></div>
+        </div>
+        <div id="tab-prod-mix" class="tab-content"><h2>Product Mix Analysis</h2><p>Eelanos Product Mix Matrix will be displayed here</p></div>
+        <div id="tab-pricing"  class="tab-content"><h2>Pricing Analysis</h2><p>Pricing analysis content will be available here.</p></div>
+
+        <!-- UPLOAD TAB -->
+        <div id="tab-upload" class="tab-content">
+            <div class="upload-page-wrapper">
+                <div class="upload-header-card">
+                    <i class="fa-solid fa-cloud-arrow-up upload-hero-icon"></i>
+                    <h2>Upload Financial Data</h2>
+                    <p>Upload your data files to refresh the analysis. Supported formats: <strong>Excel (.xlsx, .xls)</strong> and <strong>CSV (.csv)</strong>.</p>
+                </div>
+
+                <div class="upload-zone-card">
+                    <div class="upload-drop-zone" id="uploadDropZone"
+                         ondragover="uploadDragOver(event)" ondragleave="uploadDragLeave(event)" ondrop="uploadDrop(event)">
+                        <i class="fa-solid fa-file-arrow-up upload-drop-icon"></i>
+                        <p class="upload-drop-title">Drag &amp; drop your file here</p>
+                        <p class="upload-drop-sub">or</p>
+                        <label class="upload-browse-btn" for="fileInput">
+                            <i class="fa-solid fa-folder-open"></i> Browse File
+                        </label>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none;" onchange="uploadFileSelected(this)">
+                        <p class="upload-drop-formats">Accepted: .xlsx · .xls · .csv</p>
+                    </div>
+
+                    <!-- Preview after file picked -->
+                    <div class="upload-file-preview" id="uploadFilePreview" style="display:none;">
+                        <div class="upload-file-info">
+                            <i class="fa-solid fa-file-excel upload-file-icon" id="uploadFileIcon"></i>
+                            <div class="upload-file-meta">
+                                <div class="upload-file-name" id="uploadFileName">—</div>
+                                <div class="upload-file-size" id="uploadFileSize">—</div>
+                            </div>
+                            <button class="upload-remove-btn" onclick="uploadClearFile()" title="Remove">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                        <div class="upload-progress-bar-wrap" id="uploadProgressWrap" style="display:none;">
+                            <div class="upload-progress-bar" id="uploadProgressBar"></div>
+                        </div>
+                        <div class="upload-status" id="uploadStatus"></div>
+                    </div>
+
+                    <div class="upload-action-row" id="uploadActionRow" style="display:none;">
+                        <button class="upload-submit-btn" id="uploadSubmitBtn" onclick="uploadSubmit()">
+                            <i class="fa-solid fa-upload"></i> Upload &amp; Process
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Upload history / log -->
+                <div class="upload-log-card" id="uploadLogCard" style="display:none;">
+                    <div class="upload-log-header">
+                        <i class="fa-solid fa-clock-rotate-left"></i> Upload Log
+                    </div>
+                    <ul class="upload-log-list" id="uploadLogList"></ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- RCA TAB -->
+        <div id="tab-rca" class="tab-content" style="padding:0;margin:0;overflow:hidden;">
+            <iframe
+                src="https://eelanos-rca-dashboard.vercel.app/"
+                id="rca-iframe"
+                style="width:100%;height:calc(100vh - 60px);border:none;display:block;"
+                title="RCA Dashboard">
+            </iframe>
+        </div>
+
+        <!-- ASK QBER TAB -->
+        <div id="tab-ask-qber" class="tab-content" style="padding:0;margin:0;overflow:hidden;">
+            <iframe
+                src="/ask-qber"
+                id="ask-qber-iframe"
+                style="width:100%;height:calc(100vh - 60px);border:none;display:block;"
+                title="Ask QBER">
+            </iframe>
+        </div>
+
+        <!-- BENCHMARKING TAB -->
+        <div id="tab-benchmarking" class="tab-content">
+            <div class="benchmarking-wrapper">
+                <div class="bench-header-card">
+                    <h2><i class="fa-solid fa-scale-balanced" style="color:var(--primary-red);margin-right:8px;"></i>Benchmarking</h2>
+                </div>
+                <div class="bench-coming-soon">
+                    <i class="fa-solid fa-chart-column bench-cs-icon"></i>
+                    <h3>Benchmarking Module</h3>
+                    <div class="bench-feature-pills">
+                        <span class="bench-pill"><i class="fa-solid fa-building"></i> BU vs BU</span>
+                        <span class="bench-pill"><i class="fa-solid fa-boxes-stacked"></i> Product Benchmarks</span>
+                        <span class="bench-pill"><i class="fa-solid fa-users"></i> Customer Tiers</span>
+                        <span class="bench-pill"><i class="fa-solid fa-calendar-days"></i> Period over Period</span>
+                        <span class="bench-pill"><i class="fa-solid fa-industry"></i> Industry Standards</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-execute"  class="tab-content"><h2>Execute Reports</h2><p>Report execution functionality will be available here.</p></div>
+    </main>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="settingsModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeSettingsModal()">&times;</span>
+        <h3>Advanced Settings for Quadrants</h3>
+        <input type="hidden" id="modalSuffix">
+        <div class="modal-form-group"><label>Loss Threshold (&lt;):</label><input type="number" id="modalEbitLoss" class="modal-input"></div>
+        <div class="modal-form-group"><label>Profit Threshold (&gt;):</label><input type="number" id="modalEbitProfit" class="modal-input"></div>
+        <div class="modal-form-group"><label>Low Volume Threshold (&lt;=):</label><input type="number" id="modalVolLow" class="modal-input"></div>
+        <div class="modal-form-group"><label>High Volume Threshold (&lt;=):</label><input type="number" id="modalVolHigh" class="modal-input"></div>
+        <div style="text-align:right;margin-top:20px;"><button class="apply-btn-lg" onclick="applyModalSettings()">Apply</button></div>
+    </div>
+</div>
+
+<!-- DETAIL POPUP -->
+<div id="dataPopup" class="data-popup" style="display:none;">
+    <div class="popup-content table-popup" style="width:92vw;max-width:1300px;max-height:88vh;">
+        <span class="close-btn" onclick="closePopup()">&times;</span>
+        <h3 id="popupTitle" class="popup-title">Details</h3>
+        <div id="popupRowCount" class="popup-rowcount"></div>
+        <div class="table-scroll-container" style="overflow:auto;max-height:65vh;">
+            <table id="popupTable" class="detail-table" style="min-width:1100px;font-size:.8rem;">
+                <thead><tr>
+                    <th id="colNameHeader" style="position:sticky;left:0;z-index:2;background:#f8f9fa;min-width:160px;">Name</th>
+                    <th style="min-width:90px;">Volume</th>
+                    <th style="min-width:90px;">Sales</th>
+                    <th style="min-width:90px;">EBIT</th>
+                    <th style="min-width:100px;">Printing</th>
+                    <th style="min-width:100px;">Lamination</th>
+                    <th style="min-width:100px;">Hotmelt</th>
+                    <th style="min-width:100px;">Metalling</th>
+                    <th style="min-width:100px;">Embossing</th>
+                    <th style="min-width:90px;">Jobwork</th>
+                    <th style="min-width:90px;">Slitting</th>
+                    <th style="min-width:90px;">Packing</th>
+                    <th style="min-width:110px;">Cost to Serve</th>
+                </tr></thead>
+                <tbody id="popupTableBody"></tbody>
+            </table>
+        </div>
+        <div class="popup-footer">
+            <button onclick="closePopup()" class="close-dark">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden threshold inputs -->
+<div id="hiddenInputs" style="display:none;"></div>
+
+<!-- MONTH COST ACTIVITIES POPUP -->
+<div id="monthCostPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:10px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.22);overflow:hidden;">
+        <div style="background:#003399;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+            <span id="monthCostPopupTitle" style="color:#fff;font-size:1rem;font-weight:700;letter-spacing:.3px;"></span>
+            <button onclick="closeMonthCostPopup()" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+        <div style="padding:10px 0;max-height:60vh;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#f0f4ff;">
+                        <th style="padding:8px 14px;text-align:left;font-size:.8rem;color:#003399;font-weight:700;border-bottom:2px solid #dde4ff;">Activity</th>
+                        <th style="padding:8px 14px;text-align:right;font-size:.8rem;color:#003399;font-weight:700;border-bottom:2px solid #dde4ff;">Value (Rs in Lacs)</th>
+                    </tr>
+                </thead>
+                <tbody id="monthCostPopupBody"></tbody>
+            </table>
+        </div>
+        <div style="padding:12px 20px;background:#f8f9ff;border-top:2px solid #dde4ff;display:flex;justify-content:space-between;align-items:center;">
+            <span id="monthCostPopupTotal" style="font-weight:700;color:#003399;font-size:.95rem;"></span>
+            <button onclick="closeMonthCostPopup()" style="padding:7px 20px;background:#003399;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:.88rem;">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- PLANT MONTH POPUP -->
+<div id="plantMonthPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:10px;width:700px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.22);overflow:hidden;">
+        <div style="background:#8B0000;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+            <span id="plantMonthPopupTitle" style="color:#fff;font-size:1rem;font-weight:700;letter-spacing:.3px;"></span>
+            <button onclick="closePlantMonthPopup()" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+        <div style="padding:16px;">
+            <div id="plantMonthPopupChart" style="width:100%;height:360px;"></div>
+        </div>
+        <div style="padding:10px 20px 16px;text-align:right;border-top:1px solid #eee;">
+            <button onclick="closePlantMonthPopup()" style="padding:7px 20px;background:#8B0000;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:.88rem;">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- BU PLANT DISTRIBUTION POPUP -->
+<div id="buPlantPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:10px;width:620px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.22);overflow:hidden;">
+        <div style="background:#1a6b72;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+            <span id="buPlantPopupTitle" style="color:#fff;font-size:1rem;font-weight:700;letter-spacing:.3px;"></span>
+            <button onclick="closeBuPlantPopup()" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+        <div style="padding:16px;">
+            <div id="buPlantPopupChart" style="width:100%;height:340px;"></div>
+        </div>
+        <div style="padding:10px 20px 16px;text-align:right;border-top:1px solid #eee;">
+            <button onclick="closeBuPlantPopup()" style="padding:7px 20px;background:#1a6b72;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:.88rem;">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- STOCK AGEING BREAKDOWN POPUP -->
+<div id="stockAgeingPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:10px;width:min(96vw,760px);max-height:90vh;box-shadow:0 8px 40px rgba(0,0,0,.22);overflow:hidden;display:flex;flex-direction:column;">
+        <!-- Header -->
+        <div style="background:#8B0000;padding:15px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <i class="fa-solid fa-layer-group" style="color:#fff;font-size:1rem;"></i>
+                <span id="stockAgeingPopupTitle" style="color:#fff;font-size:1rem;font-weight:700;letter-spacing:.3px;"></span>
+            </div>
+            <button onclick="closeStockAgeingPopup()" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+        <!-- Tabs -->
+        <div style="display:flex;gap:4px;padding:12px 16px 0;background:#f9fafb;border-bottom:2px solid #8B0000;flex-shrink:0;">
+            <button id="stockAgeingTabPlant" class="inv-tab-btn inv-tab-active" onclick="switchStockAgeingTab('plant')">
+                <i class="fa-solid fa-industry" style="margin-right:6px;"></i>By Plant
+            </button>
+            <button id="stockAgeingTabBU" class="inv-tab-btn" onclick="switchStockAgeingTab('bu')">
+                <i class="fa-solid fa-layer-group" style="margin-right:6px;"></i>By BU
+            </button>
+            <div style="margin-left:auto;font-size:.72rem;color:#888;align-self:center;padding-right:4px;">
+                <span style="display:inline-block;width:10px;height:10px;background:#16a34a;border-radius:2px;margin-right:3px;"></span>&lt;30d
+                <span style="display:inline-block;width:10px;height:10px;background:#facc15;border-radius:2px;margin:0 3px 0 8px;"></span>30–60d
+                <span style="display:inline-block;width:10px;height:10px;background:#f97316;border-radius:2px;margin:0 3px 0 8px;"></span>60–90d
+                <span style="display:inline-block;width:10px;height:10px;background:#dc2626;border-radius:2px;margin:0 3px 0 8px;"></span>&gt;90d
+            </div>
+        </div>
+        <!-- Panels -->
+        <div style="flex:1;overflow:auto;padding:16px;">
+            <div id="stockAgeingPanelPlant">
+                <div id="stockAgeingChartPlant" style="width:100%;height:360px;"></div>
+            </div>
+            <div id="stockAgeingPanelBU" style="display:none;">
+                <div id="stockAgeingChartBU" style="width:100%;height:360px;"></div>
+            </div>
+        </div>
+        <!-- Footer -->
+        <div style="padding:10px 20px 14px;text-align:right;border-top:1px solid #eee;flex-shrink:0;">
+            <button onclick="closeStockAgeingPopup()" style="padding:7px 20px;background:#8B0000;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:.88rem;">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- STOCK MONTH MATRIX POPUP -->
+<div id="stockMonthMatrixPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:10px;width:min(96vw,960px);max-height:88vh;box-shadow:0 8px 40px rgba(0,0,0,.22);overflow:hidden;display:flex;flex-direction:column;">
+        <div id="stockMatrixPopupHeader" style="background:#8B0000;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <span id="stockMatrixPopupTitle" style="color:#fff;font-size:1rem;font-weight:700;letter-spacing:.3px;"></span>
+            <button onclick="closeStockMonthMatrixPopup()" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+        <div style="padding:16px;overflow:auto;flex:1;">
+            <div id="stockMatrixPopupBody"></div>
+        </div>
+        <div style="padding:10px 20px 16px;text-align:right;border-top:1px solid #eee;flex-shrink:0;">
+            <button onclick="closeStockMonthMatrixPopup()" id="stockMatrixCloseBtn" style="padding:7px 20px;background:#8B0000;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:.88rem;">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- INVENTORY MONTH BREAKDOWN POPUP -->
+<style>
+.inv-tab-btn{padding:8px 22px;border:none;background:#f3f4f6;color:#555;font-weight:600;font-size:.85rem;cursor:pointer;border-radius:6px 6px 0 0;transition:background .18s,color .18s;}
+.inv-tab-btn.inv-tab-active{background:#8B0000;color:#fff;}
+.inv-tab-btn:not(.inv-tab-active):hover{background:#e5e7eb;}
+</style>
+<div id="invMonthPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:10px;width:min(96vw,680px);max-height:88vh;box-shadow:0 8px 40px rgba(0,0,0,.22);overflow:hidden;display:flex;flex-direction:column;">
+        <!-- Header -->
+        <div style="background:#8B0000;padding:15px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <i class="fa-solid fa-boxes-stacked" style="color:#fff;font-size:1rem;"></i>
+                <span id="invMonthPopupTitle" style="color:#fff;font-size:1rem;font-weight:700;letter-spacing:.3px;"></span>
+            </div>
+            <button onclick="closeInvMonthPopup()" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+        <!-- Tabs -->
+        <div style="display:flex;gap:4px;padding:12px 16px 0;background:#f9fafb;border-bottom:2px solid #8B0000;flex-shrink:0;">
+            <button id="invTabPlant" class="inv-tab-btn inv-tab-active" onclick="switchInvTab('plant')">
+                <i class="fa-solid fa-industry" style="margin-right:6px;"></i>By Plant
+            </button>
+            <button id="invTabBU" class="inv-tab-btn" onclick="switchInvTab('bu')">
+                <i class="fa-solid fa-layer-group" style="margin-right:6px;"></i>By BU
+            </button>
+            <div style="margin-left:auto;font-size:.72rem;color:#888;align-self:center;padding-right:4px;">
+                <span style="display:inline-block;width:10px;height:10px;background:#16a34a;border-radius:2px;margin-right:3px;"></span>≤30d
+                <span style="display:inline-block;width:10px;height:10px;background:#d97706;border-radius:2px;margin:0 3px 0 8px;"></span>≤60d
+                <span style="display:inline-block;width:10px;height:10px;background:#dc2626;border-radius:2px;margin:0 3px 0 8px;"></span>&gt;60d
+            </div>
+        </div>
+        <!-- Panels -->
+        <div style="flex:1;overflow:auto;padding:16px;">
+            <div id="invPanelPlant">
+                <div id="invChartPlant" style="width:100%;height:340px;"></div>
+            </div>
+            <div id="invPanelBU" style="display:none;">
+                <div id="invChartBU" style="width:100%;height:340px;"></div>
+            </div>
+        </div>
+        <!-- Footer -->
+        <div style="padding:10px 20px 14px;text-align:right;border-top:1px solid #eee;flex-shrink:0;">
+            <button onclick="closeInvMonthPopup()" style="padding:7px 20px;background:#8B0000;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:.88rem;">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- SEGMENT MONTH POPUP -->
+<div id="segmentMonthPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:10px;width:720px;max-width:96vw;box-shadow:0 8px 40px rgba(0,0,0,.22);overflow:hidden;">
+        <div style="background:#5b3a8c;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+            <span id="segmentMonthPopupTitle" style="color:#fff;font-size:1rem;font-weight:700;letter-spacing:.3px;"></span>
+            <button onclick="closeSegmentMonthPopup()" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+        <div style="padding:16px;">
+            <div id="segmentMonthPopupChart" style="width:100%;height:340px;"></div>
+        </div>
+        <div style="padding:10px 20px 16px;text-align:right;border-top:1px solid #eee;">
+            <button onclick="closeSegmentMonthPopup()" style="padding:7px 20px;background:#5b3a8c;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:.88rem;">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ─── STATE ────────────────────────────────────────────────────────────────────
+const state = { quarters: new Set(), months: new Set() };
+let matrixCache = { customer:{}, product:{} };
+let selectionsList = { Cust:[], Prod:[] };
+let selectionIdCounter = { Cust:0, Prod:0 };
+let fyMonthMap = {};
+let activeSimType = { Cust:null, Prod:null };
+let activeQuadrantKey = { Cust:null, Prod:null };
+
+const qtrMap = { Q1:['APR','MAY','JUN'], Q2:['JUL','AUG','SEP'], Q3:['OCT','NOV','DEC'], Q4:['JAN','FEB','MAR'] };
+
+const strategies = {
+    Low_Profit:    { title:"Build Market",    text:"Profitable but low volume." },
+    Moderate_Profit:{ title:"Market Penetrate",text:"Decent sales and profit." },
+    High_Profit:   { title:"Comp. Adv.",      text:"High profit & volume." },
+    Low_BE:        { title:"Price Optimise",  text:"No profit, low sales." },
+    Moderate_BE:   { title:"Cost Optimise",   text:"Good sales, zero profit." },
+    High_BE:       { title:"Cost Optimise",   text:"High sales, thin margins." },
+    Low_Loss:      { title:"Prune",           text:"Loss-making & low demand." },
+    Moderate_Loss: { title:"Cost Optimise",   text:"Selling well, losing money." },
+    High_Loss:     { title:"Reposition",      text:"High demand, big losses." }
+};
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+const el = id => document.getElementById(id);
+
+function formatK(num) {
+    const a = Math.abs(num);
+    if(a >= 10000000) return (num/10000000).toFixed(2)+'Cr';
+    if(a >= 100000)   return (num/100000).toFixed(2)+'L';
+    if(a >= 1000)     return (num/1000).toFixed(1)+'k';
+    return num.toFixed(0);
+}
+
+function populateSelect(sel, values) {
+    values.forEach(v => { const o = document.createElement('option'); o.value = o.textContent = v; sel.appendChild(o); });
+}
+
+const postJSON = (url, body) => fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).then(r => r.json());
+
+function resizePlotly(scope) {
+    (scope || document).querySelectorAll('.js-plotly-plot').forEach(c => { try { Plotly.Plots.resize(c); } catch(e){} });
+}
+
+// ─── SUMMARY VIEW TOGGLE ──────────────────────────────────────────────────────
+function toggleSummaryView(type) {
+    document.querySelectorAll('.summary-view-section').forEach(s => s.style.display='none');
+    el(`view-${type}`).style.display = 'block';
+    el('btnShowProduct').classList.toggle('active', type==='product');
+    el('btnShowCustomer').classList.toggle('active', type==='customer');
+    const section = el(`view-${type}`);
+    setTimeout(() => { window.dispatchEvent(new Event('resize')); resizePlotly(section); }, 80);
+    setTimeout(() => resizePlotly(section), 300);
+}
+
+// ─── DOM BUILDERS ─────────────────────────────────────────────────────────────
+function createBox(key) {
+    const cls = key.includes('Profit') ? 'profit' : key.includes('Loss') ? 'loss' : 'be';
+    return `<div class="matrix-box ${cls}" data-k="${key}"><span class="box-title">${strategies[key].title}</span><span class="box-count">0</span></div>`;
+}
+
+const matrixStructure = `
+    <div class="matrix-header"></div>
+    <div class="matrix-header col-head">Low Vol</div>
+    <div class="matrix-header col-head">Mod Vol</div>
+    <div class="matrix-header col-head">High Vol</div>
+    <div class="matrix-header row-head">Profit</div>
+    ${createBox('Low_Profit')} ${createBox('Moderate_Profit')} ${createBox('High_Profit')}
+    <div class="matrix-header row-head">BE</div>
+    ${createBox('Low_BE')} ${createBox('Moderate_BE')} ${createBox('High_BE')}
+    <div class="matrix-header row-head">Loss</div>
+    ${createBox('Low_Loss')} ${createBox('Moderate_Loss')} ${createBox('High_Loss')}`;
+
+function simMetricRow(label, id) {
+    return `<div class="sim-metric-row"><span class="sim-metric-label">${label}</span><span id="${id}" class="sim-metric-val${label==='Simulated EBIT'?' highlight':''}"></span></div>`;
+}
+
+function buildMatrixPanel(s) {
+    return `
+    <div class="matrix-controls-wrapper">
+        <div class="chart-title" id="matrixTitle${s}" style="margin-bottom:10px;text-align:center;">Select a Quadrant</div>
+        <div class="matrix-grid" id="matrixGrid${s}"></div>
+        <div class="settings-trigger-container" style="border-top:1px solid #eee;margin-top:5px;padding-top:10px;">
+            <button class="adv-settings-btn" onclick="openSettingsModal('${s}')"><i class="fa-solid fa-sliders"></i> Advanced Settings for Quadrants</button>
+        </div>
+        <div id="strategyDisplay${s}" class="strategy-box" style="display:none;margin-top:10px;">
+            <div class="strategy-title" id="stratTitle${s}"></div>
+            <div id="stratBody${s}"></div>
+        </div>
+    </div>
+    <div class="viz-split-container">
+        <div class="viz-left-col">
+            <div class="quadrant-kpi-bar" id="quadrantKpi${s}">
+                <span class="q-kpi-title" id="qKpiTitle${s}">Total</span>
+                <div class="q-kpi-item">Vol:<span id="boxTotalVol${s}">0</span></div>
+                <div class="q-kpi-item">Sales:<span id="boxTotalSales${s}">0</span></div>
+                <div class="q-kpi-item">EBIT:<span id="boxTotalEbit${s}">0</span></div>
+            </div>
+            <div class="chart-card flex-col-full"><div id="matrixChart${s}" class="chart-inner-fill"></div></div>
+        </div>
+        <div class="viz-right-col">
+            <div id="simContainer${s}" class="sim-main-card" style="display:none;">
+                <div class="sim-header" id="simHeader${s}">Simulation Outcome</div>
+                <div id="simQuadName${s}" class="sim-quad-name"></div>
+                <div id="simSelectionsList${s}" class="sim-selections-list" style="display:none;"></div>
+                <div class="sim-input-group">
+                    <label id="simLabel${s}">Improve Sales %</label>
+                    <div class="sim-input-row">
+                        <input type="number" id="simPercent${s}" placeholder="5" value="5">
+                        <button class="sim-btn" onclick="runSimulation('${s}')">Go</button>
+                    </div>
+                </div>
+                <div id="simResults${s}" style="display:none;">
+                    <div class="sim-results-container">
+                        ${simMetricRow('Quadrant Total EBIT','simQuadrantEbit'+s)}
+                        ${simMetricRow('Current Selection EBIT','simOldEbit'+s)}
+                        ${simMetricRow('Simulated EBIT','simNewEbit'+s)}
+                    </div>
+                    <div class="net-increase-block">
+                        <span class="net-increase-title">Net Increase (All Selections)</span>
+                        <span id="simDiff${s}" class="net-increase-val"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+function chartCard(id, title, fullWidth, hint) {
+    const hintHtml = hint ? `<div class="chart-hint-visible" style="margin-top:6px;"><i class="fa-solid fa-hand-pointer"></i> ${hint}</div>` : '';
+    return `<div class="chart-card${fullWidth?' full-width':''}">
+        <div class="chart-card-header">
+            <div class="chart-card-title">${title}</div>
+        </div>
+        <div id="${id}" style="flex:1;min-height:0;"></div>
+        ${hintHtml}
+    </div>`;
+}
+
+function kpiCard(label, id, colorClass, sub) {
+    return `<div class="kpi-card ${colorClass}">
+        <div class="kpi-label">${label}</div>
+        <div class="kpi-value" id="${id}">—</div>
+        <div class="kpi-sub">${sub}</div>
+    </div>`;
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    el('matrixLayoutCust').innerHTML = buildMatrixPanel('Cust');
+    el('matrixLayoutProd').innerHTML = buildMatrixPanel('Prod');
+
+    // KPI row for cost tab
+    el('costKpiRow').innerHTML =
+        kpiCard('Total Direct Cost', 'kpiDirectCost', 'red', 'Rs in Lacs') +
+        kpiCard('Total Fixed Cost', 'kpiFixedCost', 'blue', 'Rs in Lacs') +
+        kpiCard('Closing Stock', 'kpiClosingStock', 'amber', 'Rs in Lacs') +
+        kpiCard('Avg Inventory Days', 'kpiInvDays', 'teal', 'Days') +
+        kpiCard('Non-Moving Stock', 'kpiNonMoving', 'purple', 'Rs in Lacs');
+
+    el('costGrid').innerHTML =
+        chartCard('costChartMonth','Month Wise Cost Analysis (Rs in Lacs)', false, 'Click on a month to get cost breakdown') +
+        chartCard('costChartPlant','Plant Wise Cost Analysis (Rs in Lacs)', false, 'Click on a plant to see its month-wise cost trend') +
+        chartCard('costChartBU','BU Wise Cost Analysis (Rs in Lacs)', false, 'Click on a BU to see its plant-wise cost distribution') +
+        chartCard('costChartStock','Stock Analysis (Rs in Lacs)', false, 'Click on a month to see Plant & BU breakdown') +
+        chartCard('costChartInvDays','Inventory Analysis (Avg Days)', false, 'Click on a month to see Plant & BU breakdown') +
+        chartCard('costChartAgeing','Stock Ageing Analysis (Rs in Lacs)', false, 'Click on a month bar to see Plant & BU ageing breakdown');
+
+    // KPI row for profit tab
+    el('profKpiRow').innerHTML =
+        kpiCard('Total EBIT', 'kpiTotalEbit', 'green', 'Rs in Lacs') +
+        kpiCard('Total Sales', 'kpiTotalSales', 'blue', 'Rs in Lacs') +
+        kpiCard('EBIT Margin', 'kpiEbitMargin', 'teal', '% of Sales') +
+        kpiCard('Top BU EBIT', 'kpiTopBuEbit', 'amber', 'Best performer') +
+        kpiCard('Loss-making Segments', 'kpiLossSeg', 'red', 'Segments at loss');
+
+    el('profitGrid').innerHTML =
+        chartCard('profChartMonth','Profit Analysis by Month') +
+        chartCard('profChartPlant','Profit Analysis by Plant') +
+        chartCard('profChartBU','Profit Analysis by BU') +
+        chartCard('profChartSeg','Profit Analysis by Segment');
+
+    const hi = el('hiddenInputs');
+    ['Cust','Prod'].forEach(s => {
+        ['ebitLoss','ebitProfit','volLow','volHigh'].forEach(f => {
+            const inp = document.createElement('input');
+            inp.type = 'hidden'; inp.id = `${f}Input${s}`;
+            hi.appendChild(inp);
+        });
+    });
+
+    [
+        { label:'Plant', id:'plantSelect' },
+        { label:'BU',    id:'buSelect' },
+        { label:'Product Group', id:'pgSelect' },
+        { label:'Segment', id:'segSelect' },
+        { label:'FY',    id:'yearSelect' }
+    ].forEach(d => {
+        el('headerFilters').insertAdjacentHTML('beforeend',
+            `<div class="filter-group-header" data-filter-id="${d.id}"><label class="filter-label-header">${d.label}</label><select id="${d.id}" class="header-select"><option value="All">All</option></select></div>`);
+    });
+
+    ['Cust','Prod'].forEach(s => {
+        el(`matrixGrid${s}`).innerHTML = matrixStructure;
+        document.querySelectorAll(`#matrixGrid${s} .matrix-box`).forEach(box => {
+            box.onclick = () => filterMatrix(box.dataset.k, box, s);
+        });
+    });
+
+    initialize();
+
+    // Cost tab is active by default — hide BU and Segment filters initially
+    setTimeout(() => {
+        const buFilter  = document.querySelector('.filter-group-header[data-filter-id="buSelect"]');
+        const segFilter = document.querySelector('.filter-group-header[data-filter-id="segSelect"]');
+        if (buFilter)  buFilter.style.display  = 'none';
+        if (segFilter) segFilter.style.display = 'none';
+    }, 0);
+});
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+function openTab(evt, tabName) {
+    document.querySelectorAll('.tab-content').forEach(t => t.style.display='none');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+    el(tabName).style.display = 'block';
+    if(!evt.currentTarget.classList.contains('refresh-btn')) evt.currentTarget.classList.add('active');
+
+    // Control Filter Visibility
+    const filterBar = el('global-analysis-filters');
+    const viewToggle = el('analysis-view-toggle');
+
+    // Show filters for Cost, Profit, and Qber Matrix
+    if (['tab-cost', 'tab-profit', 'tab-epc'].includes(tabName)) {
+        filterBar.style.display = 'block';
+        // Only show Customer/Product toggle for the Matrix tab
+        viewToggle.style.display = (tabName === 'tab-epc') ? 'flex' : 'none';
+    } else {
+        filterBar.style.display = 'none';
+    }
+
+    // Existing sidebar/header logic...
+    const tabsWithoutFilters = ['tab-prod-mix', 'tab-pricing', 'tab-rca', 'tab-benchmarking', 'tab-ask-qber'];
+    const headerRight = document.querySelector('.header-right');
+    headerRight.style.visibility = tabsWithoutFilters.includes(tabName) ? 'hidden' : 'visible';
+
+    // Hide BU and Segment filters on Cost Analysis tab
+    const buFilter  = document.querySelector('.filter-group-header[data-filter-id="buSelect"]');
+    const segFilter = document.querySelector('.filter-group-header[data-filter-id="segSelect"]');
+    if (buFilter && segFilter) {
+        const hideBuSeg = (tabName === 'tab-cost');
+        buFilter.style.display  = hideBuSeg ? 'none' : '';
+        segFilter.style.display = hideBuSeg ? 'none' : '';
+    }
+
+    setTimeout(() => { window.dispatchEvent(new Event('resize')); resizePlotly(el(tabName)); }, 80);
+}
+
+function openSubTab(evt, subTabId) {
+    document.querySelectorAll('.sub-tab-content').forEach(e => e.style.display='none');
+    document.querySelectorAll('.sub-tab-btn').forEach(e => e.classList.remove('active'));
+    el(subTabId).style.display = 'block';
+    evt.currentTarget.classList.add('active');
+    setTimeout(() => { window.dispatchEvent(new Event('resize')); resizePlotly(el(subTabId)); }, 50);
+}
+
+// ─── SETTINGS MODAL ───────────────────────────────────────────────────────────
+function openSettingsModal(suffix) {
+    el('modalSuffix').value = suffix;
+    ['EbitLoss','EbitProfit','VolLow','VolHigh'].forEach(f => {
+        el(`modal${f}`).value = el(`${f.charAt(0).toLowerCase()+f.slice(1)}Input${suffix}`).value;
+    });
+    el('settingsModal').style.display = 'flex';
+}
+function closeSettingsModal() { el('settingsModal').style.display='none'; }
+function applyModalSettings() {
+    const suffix = el('modalSuffix').value;
+    ['EbitLoss','EbitProfit','VolLow','VolHigh'].forEach(f => {
+        el(`${f.charAt(0).toLowerCase()+f.slice(1)}Input${suffix}`).value = el(`modal${f}`).value;
+    });
+    closeSettingsModal();
+    refreshAll();
+}
+
+// ─── INITIALIZATION ───────────────────────────────────────────────────────────
+async function initialize() {
+    try {
+        const opts = await fetch('/api/get_filter_options').then(r => r.json());
+
+        populateSelect(el('plantSelect'), opts.plants);
+        populateSelect(el('buSelect'),    opts.bus);
+        populateSelect(el('pgSelect'),    opts.product_groups);
+        populateSelect(el('segSelect'),   opts.segments);
+        populateSelect(el('yearSelect'),  opts.years);
+
+        const custDD = el('customerDrilldownSelect');
+        const prodDD = el('productDrilldownSelect');
+        populateSelect(custDD, opts.customers);
+        populateSelect(prodDD, opts.products);
+
+        fyMonthMap = opts.fy_month_map;
+
+        const monthContainer = el('monthChips');
+        opts.months.forEach(m => {
+            const chip = document.createElement('div');
+            chip.className = 'filter-chip'; chip.textContent = m; chip.dataset.month = m;
+            chip.onclick = () => toggleMonth(m);
+            monthContainer.appendChild(chip);
+        });
+
+        $(custDD).select2({ placeholder:'All Customers', width:'100%' });
+        $(prodDD).select2({ placeholder:'All Products',  width:'100%' });
+        $(custDD).on('change', refreshAll);
+        $(prodDD).on('change', refreshAll);
+
+        ['plantSelect','buSelect','pgSelect','segSelect','yearSelect'].forEach(id => el(id).addEventListener('change', refreshAll));
+        el('yearSelect').addEventListener('change', updateMonthState);
+
+        updateMonthState();
+        refreshAll();
+    } catch(e) { console.error(e); }
+}
+
+// ─── FILTER LOGIC ─────────────────────────────────────────────────────────────
+function updateMonthState() {
+    const selYear = el('yearSelect').value;
+    const allMonths = document.querySelectorAll('#monthChips .filter-chip');
+    if(selYear === 'All') {
+        allMonths.forEach(c => c.classList.remove('disabled'));
+    } else {
+        const valid = fyMonthMap[selYear] || [];
+        allMonths.forEach(c => {
+            if(valid.includes(c.dataset.month)) {
+                c.classList.remove('disabled');
+            } else {
+                c.classList.add('disabled');
+                c.classList.remove('active');
+                state.months.delete(c.dataset.month);
+            }
+        });
+    }
+}
+
+function toggleQuarter(q) {
+    const chip = document.querySelector(`.filter-chip[data-quarter="${q}"]`);
+    if(state.quarters.has(q)) {
+        state.quarters.delete(q);
+        chip.classList.remove('active');
+    } else {
+        state.quarters.add(q);
+        chip.classList.add('active');
+    }
+    refreshAll();
+}
+
+function toggleMonth(m) {
+    const chip = document.querySelector(`.filter-chip[data-month="${m}"]`);
+    if(chip.classList.contains('disabled')) return;
+    if(state.months.has(m)) {
+        state.months.delete(m);
+        chip.classList.remove('active');
+    } else {
+        state.months.add(m);
+        chip.classList.add('active');
+    }
+    refreshAll();
+}
+
+function resetDrilldown(type) {
+    $(`#${type}DrilldownSelect`).val('All').trigger('change');
+    refreshAll();
+}
+
+function getBasePayload() {
+    return {
+        plant:         el('plantSelect').value,
+        bu:            el('buSelect').value,
+        product_group: el('pgSelect').value,
+        segment:       el('segSelect').value,
+        years:         [el('yearSelect').value],
+        quarters:      Array.from(state.quarters),
+        months:        Array.from(state.months)
+    };
+}
+
+async function refreshAll() {
+    const custDrilldown = $('#customerDrilldownSelect').val();
+    const prodDrilldown = $('#productDrilldownSelect').val();
+
+    el('custCurveTitle').innerText = custDrilldown === 'All' ? 'Customer Wise Profit Whale Curve' : `Product Wise Profit Whale Curve for (${custDrilldown})`;
+    el('prodCurveTitle').innerText = prodDrilldown === 'All' ? 'Product Wise Profit Whale Curve' : `Customer Wise Profit Whale Curve for (${prodDrilldown})`;
+
+    const payload = { ...getBasePayload(), customer_chart_filter:custDrilldown, product_chart_filter:prodDrilldown };
+
+    // ── QBER tab whale curves → pc_analysis_matrix DB ──────────────────────────
+    try {
+        const data = await postJSON('/api/curve_dashboard_data_matrix', payload);
+        createCurveChart('customerChart', data.customer, custDrilldown === 'All' ? 'Customers' : 'Products');
+        createCurveChart('productChart',  data.product,  prodDrilldown === 'All' ? 'Products'  : 'Customers');
+    } catch(e) { console.error(e); }
+
+    // ── QBER Cost Matrix panels (customer + product) → pc_analysis_matrix DB ───
+    await loadMatrixData(payload, 'customer', 'Cust', true);
+    await loadMatrixData(payload, 'product',  'Prod', true);
+
+    // ── Cost & Profit analysis tabs → pc_analysis DB ───────────────────────────
+    loadAnalysisData(payload);
+    loadSummaryData();
+}
+
+// ─── MATRIX ───────────────────────────────────────────────────────────────────
+async function loadMatrixData(basePayload, type, suffix, useMatrixDB=false) {
+    const payload = { ...basePayload, matrix_type:type };
+    const fields = { ebitLoss:'ebit_loss', ebitProfit:'ebit_profit', volLow:'vol_low', volHigh:'vol_high' };
+    Object.entries(fields).forEach(([k, ak]) => { const v = el(`${k}Input${suffix}`).value; if(v) payload[ak] = v; });
+
+    // QBER Cost Matrix always reads from pc_analysis_matrix (old dataset)
+    const matrixEndpoint = useMatrixDB ? '/api/matrix_data_old' : '/api/matrix_data';
+
+    try {
+        const data = await postJSON(matrixEndpoint, payload);
+        matrixCache[type] = data;
+
+        if(data.meta?.thresholds) {
+            const t = data.meta.thresholds;
+            const map = { ebitLossInput:t.ebit_loss, ebitProfitInput:t.ebit_profit, volLowInput:t.vol_low, volHighInput:t.vol_high };
+            Object.entries(map).forEach(([k, v]) => { if(!el(`${k}${suffix}`).value) el(`${k}${suffix}`).value = v; });
+        }
+
+        el(`qKpiTitle${suffix}`).innerText    = 'Total';
+        el(`boxTotalEbit${suffix}`).innerText  = formatK(data.meta.total_ebit  || 0);
+        el(`boxTotalVol${suffix}`).innerText   = formatK(data.meta.total_vol   || 0);
+        el(`boxTotalSales${suffix}`).innerText = formatK(data.meta.total_sales || 0);
+
+        document.querySelectorAll(`#matrixGrid${suffix} .box-count`).forEach(e => e.innerText='0');
+        if(data && !data.error) {
+            Object.keys(data).forEach(k => {
+                if(k === 'meta') return;
+                const box = document.querySelector(`#matrixGrid${suffix} .matrix-box[data-k="${k}"]`);
+                if(box) box.querySelector('.box-count').innerText = data[k].count || 0;
+            });
+        }
+    } catch(e) { console.error(e); }
+}
+
+function filterMatrix(key, boxEl, suffix) {
+    document.querySelectorAll(`#matrixGrid${suffix} .matrix-box`).forEach(b => b.classList.remove('active'));
+    boxEl.classList.add('active');
+    activeQuadrantKey[suffix] = key;
+    selectionsList[suffix] = [];
+
+    const strat = strategies[key];
+    el(`strategyDisplay${suffix}`).style.display = 'block';
+    el(`stratTitle${suffix}`).innerText = strat.title;
+    el(`stratBody${suffix}`).innerText  = strat.text;
+
+    const type = suffix === 'Cust' ? 'customer' : 'product';
+    const data = matrixCache[type][key];
+
+    el(`qKpiTitle${suffix}`).innerText    = strat.title;
+    el(`boxTotalEbit${suffix}`).innerText  = data ? formatK(data.total_box_ebit  || 0) : '0';
+    el(`boxTotalVol${suffix}`).innerText   = data ? formatK(data.total_box_vol   || 0) : '0';
+    el(`boxTotalSales${suffix}`).innerText = data ? formatK(data.total_box_sales || 0) : '0';
+
+    el(`simQuadName${suffix}`).innerText = strat.title;
+    const simContainer = el(`simContainer${suffix}`);
+    if(key === 'Low_BE') {
+        simContainer.style.display = 'flex'; el(`simLabel${suffix}`).innerText = 'Improve Sales %:'; activeSimType[suffix] = 'price';
+    } else if(['Moderate_BE','High_BE','Moderate_Loss'].includes(key)) {
+        simContainer.style.display = 'flex'; el(`simLabel${suffix}`).innerText = 'Reduce Cost %:'; activeSimType[suffix] = 'cost';
+    } else {
+        simContainer.style.display = 'none'; activeSimType[suffix] = null;
+    }
+
+    el(`simResults${suffix}`).style.display       = 'none';
+    el(`simSelectionsList${suffix}`).style.display = 'none';
+    renderMatrixChart(suffix, key, data);
+}
+
+// ─── MATRIX CHART ─────────────────────────────────────────────────────────────
+const bubbleColor = key => key.includes('Profit') ? '#137333' : key.includes('Loss') ? '#c5221f' : '#5f6368';
+
+const makeMarker = (sizes, color, refSize) => ({
+    size:sizes, sizemode:'area', sizeref:2.0*refSize/(30**2), color, opacity:0.6, line:{color:'white',width:1}
+});
+
+const matrixLayout = showLegend => ({
+    margin:{t:10,b:50,l:60,r:20}, xaxis:{title:'Volume',zeroline:false}, yaxis:{title:'EBIT (Lakhs)',zeroline:true},
+    hovermode:'closest', dragmode:'lasso', showlegend:showLegend,
+    ...(showLegend ? {legend:{x:1,xanchor:'right',y:1,bgcolor:'rgba(255,255,255,0.8)',bordercolor:'#ccc',borderwidth:1}} : {})
+});
+
+const whaleTmpl = '<b>%{text}</b><br> EBIT: %{customdata:,.2f} Lakhs<extra></extra>';
+const bubbleTmpl = '<b>%{text}</b><br>Vol: %{x:,.0f}<br>EBIT: %{y:,.2f} L<extra></extra>';
+
+function renderMatrixChart(suffix, key, data) {
+    const chartId = `matrixChart${suffix}`;
+    if(!data?.labels) { el(chartId).innerHTML="<div class='no-data'>No Data</div>"; return; }
+
+    const sizes = data.y.map(Math.abs);
+    const trace = {
+        x:data.x, y:data.y, text:data.labels, customdata:data.details, mode:'markers', name:'Original',
+        marker:makeMarker(sizes, bubbleColor(key), Math.max(...sizes)),
+        hovertemplate:bubbleTmpl
+    };
+
+    Plotly.newPlot(chartId, [trace], matrixLayout(false), {responsive:true,displayModeBar:false});
+    const chartEl = el(chartId);
+    chartEl.on('plotly_selected', ev => { if(!ev || !ev.points.length) return; addSelection(suffix, ev.points.map(p => p.customdata)); });
+    chartEl.on('plotly_click', async d => { if(d.points.length > 0) openDetailPopup(d.points[0].text, suffix==='Cust'?'customer':'product'); });
+}
+
+function updateChartWithSimulation(suffix, pct, simType) {
+    const type = suffix === 'Cust' ? 'customer' : 'product';
+    const key  = activeQuadrantKey[suffix];
+    const data = matrixCache[type][key];
+    const chartId = `matrixChart${suffix}`;
+    if(!data?.labels) return;
+
+    const selectedNames = new Set();
+    selectionsList[suffix].forEach(s => s.points.forEach(p => selectedNames.add(p.name)));
+
+    const origX=[], origY=[], origText=[], origCD=[], origSz=[];
+    const simX=[], simY=[], simText=[], simCD=[], simSz=[];
+
+    data.labels.forEach((label, i) => {
+        const detail = data.details[i];
+        origX.push(data.x[i]); origY.push(data.y[i]); origText.push(label); origCD.push(detail); origSz.push(Math.abs(data.y[i]));
+        if(selectedNames.has(label)) {
+            let ebit = parseFloat(detail.ebit), sales = parseFloat(detail.sales), simEbit = ebit;
+            if(simType === 'price')    simEbit = ebit + sales * (pct/100);
+            else if(simType === 'cost') simEbit = ebit + (sales - ebit) * (pct/100);
+            const simEbitL = simEbit / 100000;
+            simX.push(data.x[i]); simY.push(simEbitL); simText.push(label); simCD.push(detail); simSz.push(Math.abs(simEbitL));
+        }
+    });
+
+    const maxOrig = Math.max(...origSz);
+    const traces = [{
+        x:origX, y:origY, text:origText, customdata:origCD, mode:'markers', name:'Original',
+        marker:makeMarker(origSz, bubbleColor(key), maxOrig),
+        hovertemplate:bubbleTmpl
+    }];
+
+    if(simX.length > 0) {
+        traces.push({
+            x:simX, y:simY, text:simText, customdata:simCD, mode:'markers', name:'Simulated',
+            marker:{ size:simSz, sizemode:'area', sizeref:2.0*maxOrig/(30**2), color:'#FF6B35', opacity:0.8, line:{color:'#FFD700',width:2} },
+            hovertemplate:'<b>%{text}</b> (Simulated)<br>Vol: %{x:,.0f}<br>EBIT: %{y:,.2f} L<extra></extra>'
+        });
+    }
+
+    Plotly.react(chartId, traces, matrixLayout(simX.length > 0), {responsive:true,displayModeBar:false});
+    const chartEl = el(chartId);
+    chartEl.removeAllListeners('plotly_selected');
+    chartEl.removeAllListeners('plotly_click');
+    chartEl.on('plotly_selected', ev => {
+        if(!ev || !ev.points.length) return;
+        const pts = ev.points.filter(p => p.data.name === 'Original').map(p => p.customdata);
+        if(pts.length) addSelection(suffix, pts);
+    });
+    chartEl.on('plotly_click', async d => {
+        if(d.points.length > 0 && d.points[0].data.name === 'Original') openDetailPopup(d.points[0].text, suffix==='Cust'?'customer':'product');
+    });
+}
+
+// ─── SELECTIONS ───────────────────────────────────────────────────────────────
+function addSelection(suffix, points) {
+    const existing = new Set();
+    selectionsList[suffix].forEach(s => s.points.forEach(p => existing.add(p.name)));
+    const unique = points.filter(p => !existing.has(p.name));
+    if(!unique.length) { alert('All selected points are already in existing selections!'); return; }
+    selectionsList[suffix].push({ id:selectionIdCounter[suffix]++, points:unique, count:unique.length });
+    renderSelectionsList(suffix);
+}
+
+function renderSelectionsList(suffix) {
+    const container = el(`simSelectionsList${suffix}`);
+    if(!selectionsList[suffix].length) { container.style.display='none'; return; }
+    container.style.display = 'block';
+    container.innerHTML = '';
+    selectionsList[suffix].forEach((sel, i) => {
+        const item = document.createElement('div');
+        item.className = 'selection-item';
+        item.dataset.selectionId = sel.id;
+        item.innerHTML = `<div class="selection-info"><div class="selection-label">Selection ${i+1}</div><div class="selection-count">${sel.count} item${sel.count>1?'s':''}</div></div><button class="selection-remove"><i class="fa-solid fa-times"></i></button>`;
+        item.querySelector('.selection-info').addEventListener('click', () => highlightSelection(suffix, sel.id));
+        item.querySelector('.selection-remove').addEventListener('click', e => { e.stopPropagation(); removeSelection(suffix, sel.id); });
+        container.appendChild(item);
+    });
+}
+
+function removeSelection(suffix, selectionId) {
+    selectionsList[suffix] = selectionsList[suffix].filter(s => s.id !== selectionId);
+    renderSelectionsList(suffix);
+    const chartId = `matrixChart${suffix}`;
+    if(el(chartId)?.data) Plotly.restyle(chartId, {'marker.line.width':1,'marker.line.color':'white'});
+    if(!selectionsList[suffix].length) {
+        el(`simResults${suffix}`).style.display = 'none';
+        const type = suffix === 'Cust' ? 'customer' : 'product';
+        renderMatrixChart(suffix, activeQuadrantKey[suffix], matrixCache[type][activeQuadrantKey[suffix]]);
+    }
+}
+
+function highlightSelection(suffix, selectionId) {
+    const sel = selectionsList[suffix].find(s => s.id === selectionId);
+    if(!sel) return;
+    const chartId = `matrixChart${suffix}`;
+    const chartEl = el(chartId);
+    if(!chartEl?.data?.[0]) return;
+    const names = new Set(sel.points.map(p => p.name));
+    const allLabels = chartEl.data[0].text;
+    Plotly.restyle(chartId, {
+        'marker.line.width': [allLabels.map(l => names.has(l) ? 4 : 1)],
+        'marker.line.color': [allLabels.map(l => names.has(l) ? '#FFD700' : 'white')]
+    });
+    document.querySelectorAll(`#simSelectionsList${suffix} .selection-item`).forEach(e => e.classList.remove('highlighted'));
+    const item = document.querySelector(`#simSelectionsList${suffix} .selection-item[data-selection-id="${selectionId}"]`);
+    if(item) { item.classList.add('highlighted'); setTimeout(() => item.classList.remove('highlighted'), 2000); }
+}
+
+// ─── SIMULATION ───────────────────────────────────────────────────────────────
+function runSimulation(suffix) {
+    const type = suffix === 'Cust' ? 'customer' : 'product';
+    const key  = activeQuadrantKey[suffix];
+    if(!key || !matrixCache[type][key]) return;
+
+    const pct     = parseFloat(el(`simPercent${suffix}`).value) || 0;
+    const simType = activeSimType[suffix];
+    const qData   = matrixCache[type][key];
+    const qEbit   = qData.total_box_ebit || 0;
+
+    let curEbit = 0, curSales = 0;
+    if(selectionsList[suffix].length) {
+        selectionsList[suffix].forEach(s => s.points.forEach(p => { curEbit += parseFloat(p.ebit); curSales += parseFloat(p.sales); }));
+    } else {
+        curEbit = qEbit; curSales = qData.total_box_sales || 0;
+    }
+
+    let newEbit = curEbit;
+    if(simType === 'price')     newEbit = curEbit + curSales * (pct/100);
+    else if(simType === 'cost') newEbit = curEbit + (curSales - curEbit) * (pct/100);
+
+    const diff = newEbit - curEbit;
+    el(`simQuadrantEbit${suffix}`).innerText = formatK(qEbit);
+    el(`simOldEbit${suffix}`).innerText      = formatK(curEbit);
+    el(`simNewEbit${suffix}`).innerText      = formatK(newEbit);
+    el(`simDiff${suffix}`).innerText         = (diff >= 0 ? '+' : '') + formatK(diff);
+    el(`simResults${suffix}`).style.display  = 'block';
+    updateChartWithSimulation(suffix, pct, simType);
+}
+
+// ─── ANALYSIS CHARTS ──────────────────────────────────────────────────────────
+async function loadAnalysisData(payload) {
+    window._lastAnalysisPayload = payload; // store for segment/plant popups
+    try {
+        const data = await postJSON('/api/analysis_dashboard_data', payload);
+        if(data.empty || data.error) return;
+
+        // Pass cost cols data for month popup
+        const costData = {};
+        ['cost_printing','cost_lamination','cost_hotmelt','cost_metalling','cost_embossing',
+         'cost_jobwork','cost_slitting','cost_packing','cost_cost_to_serve'].forEach(c => {
+            costData[c] = data.month[c] || [];
+        });
+
+        renderMonthCostLines('costChartMonth', data.month.labels, data.month.direct_cost, data.month.fixed_cost, costData);
+        renderSingleBarSorted('costChartPlant', data.plant.labels, data.plant.va, data.plant.sales, 'Plant');
+        renderSingleBarSorted('costChartBU',    data.bu.labels,    data.bu.va,    data.bu.sales,    'BU');
+
+        // ── Populate Cost KPIs ──
+        const totalDirectCost = (data.month.direct_cost||[]).reduce((a,b)=>a+b,0);
+        const totalFixedCost  = (data.month.fixed_cost||[]).reduce((a,b)=>a+b,0);
+        if(el('kpiDirectCost'))  el('kpiDirectCost').innerText  = totalDirectCost.toFixed(1)+' L';
+        if(el('kpiFixedCost'))   el('kpiFixedCost').innerText   = totalFixedCost.toFixed(1)+' L';
+
+        // ── Populate Profit KPIs ──
+        const totalEbit  = (data.month.ebit||[]).reduce((a,b)=>a+b,0);
+        const totalSales = (data.month.sales||[]).reduce((a,b)=>a+b,0);
+        const ebitMargin = totalSales ? ((totalEbit / totalSales)*100).toFixed(1) : '—';
+        if(el('kpiTotalEbit'))    el('kpiTotalEbit').innerText    = totalEbit.toFixed(1)+' L';
+        if(el('kpiTotalSales'))   el('kpiTotalSales').innerText   = totalSales.toFixed(1)+' L';
+        if(el('kpiEbitMargin'))   el('kpiEbitMargin').innerText   = ebitMargin+'%';
+        if(el('kpiLossSeg')) {
+            const lossCount = (data.segment?.ebit||[]).filter(v=>v<0).length;
+            el('kpiLossSeg').innerText = lossCount;
+        }
+        if(el('kpiTopBuEbit') && data.bu?.labels && data.bu?.ebit) {
+            const maxIdx = data.bu.ebit.indexOf(Math.max(...data.bu.ebit));
+            el('kpiTopBuEbit').innerText = data.bu.labels[maxIdx] || '—';
+        }
+
+        // Plant click → show month-wise popup
+        const plantChartEl = document.getElementById('costChartPlant');
+        plantChartEl.removeAllListeners && plantChartEl.removeAllListeners('plotly_click');
+        plantChartEl.on('plotly_click', async function(eventData) {
+            if (!eventData || !eventData.points || !eventData.points.length) return;
+            const plantName = eventData.points[0].x;
+            openPlantMonthPopup(plantName, payload);
+        });
+
+        // BU click → show plant-wise pie chart popup
+        // We need per-BU plant breakdown from the raw data — fetch it
+        const buChartEl = document.getElementById('costChartBU');
+        buChartEl.removeAllListeners && buChartEl.removeAllListeners('plotly_click');
+        buChartEl.on('plotly_click', async function(eventData) {
+            if (!eventData || !eventData.points || !eventData.points.length) return;
+            const buName = eventData.points[0].x;
+            openBuPlantPopup(buName, payload);
+        });
+
+        renderSingleBar('profChartMonth', data.month.labels,   data.month.ebit,          'Month',   true, false);
+        renderSingleBar('profChartPlant', data.plant.labels,   data.plant.ebit,          'Plant',   true, true);
+        renderSingleBar('profChartBU',    data.bu.labels,      data.bu.ebit,             'BU',      true, true);
+        renderSingleBar('profChartSeg',   data.segment.labels, data.segment.ebit,        'Segment', true, true);
+
+        // ── Stock Analysis ──
+        const stockEl = document.getElementById('costChartStock');
+        if (stockEl) {
+            stockEl.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.9rem;"><i class="fa-solid fa-spinner fa-spin"></i> Loading stock data…</div>';
+            try {
+                const stockData = await postJSON('/api/stock_analysis', payload);
+                console.log('[Stock Analysis] response:', stockData);
+                if (stockData.error) {
+                    stockEl.innerHTML = '<div style="background:#fce8e6;border:1px solid #dc3545;border-radius:6px;padding:16px 20px;margin:12px;color:#c0392b;font-size:.85rem;"><strong>⚠️ Stock Analysis Error</strong><br><code style="display:block;margin-top:8px;white-space:pre-wrap;">' + stockData.error + '</code></div>';
+                } else if (stockData.empty) {
+                    stockEl.innerHTML = '<div style="text-align:center;padding:40px;color:#888;"><i class="fa-solid fa-inbox"></i><br>No stock data for selected filters.</div>';
+                } else {
+                    stockEl.innerHTML = '';
+                    renderStockAnalysis('costChartStock', stockData.labels, stockData.amount, stockData.non_moving, stockData.slow_moving);
+                    // Populate KPI cards
+                    const latestAmount     = stockData.amount?.slice(-1)[0] || 0;
+                    const latestNonMoving  = stockData.non_moving?.slice(-1)[0] || 0;
+                    if(el('kpiClosingStock')) el('kpiClosingStock').innerText  = latestAmount.toFixed(1)+' L';
+                    if(el('kpiNonMoving'))    el('kpiNonMoving').innerText     = latestNonMoving.toFixed(1)+' L';
+                }
+            } catch(se) {
+                console.error('[Stock Analysis] error:', se);
+                stockEl.innerHTML = '<div style="background:#fce8e6;border:1px solid #dc3545;border-radius:6px;padding:16px 20px;margin:12px;color:#c0392b;font-size:.85rem;"><strong>⚠️ Stock Analysis — Error</strong><br><code style="display:block;margin-top:8px;white-space:pre-wrap;">' + se.message + '</code></div>';
+            }
+        }
+        // ── Stock Ageing Analysis ──
+        const ageingEl = document.getElementById('costChartAgeing');
+        if (ageingEl) {
+            ageingEl.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.9rem;"><i class="fa-solid fa-spinner fa-spin"></i> Loading ageing data…</div>';
+            try {
+                const ageingData = await postJSON('/api/stock_ageing_analysis', payload);
+                if (ageingData.error) {
+                    ageingEl.innerHTML = '<div style="background:#fce8e6;border:1px solid #dc3545;border-radius:6px;padding:16px 20px;margin:12px;color:#c0392b;font-size:.85rem;"><strong>⚠️ Stock Ageing Error</strong><br><code style="display:block;margin-top:8px;white-space:pre-wrap;">' + ageingData.error + '</code></div>';
+                } else if (ageingData.empty) {
+                    ageingEl.innerHTML = '<div style="text-align:center;padding:40px;color:#888;"><i class="fa-solid fa-inbox"></i><br>No ageing data for selected filters.</div>';
+                } else {
+                    ageingEl.innerHTML = '';
+                    renderStockAgeing('costChartAgeing', ageingData);
+                }
+            } catch(ae) {
+                console.error('[Stock Ageing] error:', ae);
+                ageingEl.innerHTML = '<div style="background:#fce8e6;border:1px solid #dc3545;border-radius:6px;padding:16px 20px;margin:12px;color:#c0392b;font-size:.85rem;"><strong>⚠️ Stock Ageing — Error</strong><br><code style="display:block;margin-top:8px;white-space:pre-wrap;">' + ae.message + '</code></div>';
+            }
+        }
+
+        // ── Inventory Analysis ──
+        const invEl = document.getElementById('costChartInvDays');
+        if (invEl) {
+            invEl.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.9rem;"><i class="fa-solid fa-spinner fa-spin"></i> Loading inventory data…</div>';
+            try {
+                const invData = await postJSON('/api/inventory_analysis', payload);
+                if (invData.error) {
+                    invEl.innerHTML = '<div style="background:#fce8e6;border:1px solid #dc3545;border-radius:6px;padding:16px 20px;margin:12px;color:#c0392b;font-size:.85rem;"><strong>⚠️ Inventory Analysis Error</strong><br><code style="display:block;margin-top:8px;white-space:pre-wrap;">' + invData.error + '</code></div>';
+                } else if (invData.empty) {
+                    invEl.innerHTML = '<div style="text-align:center;padding:40px;color:#888;"><i class="fa-solid fa-inbox"></i><br>No inventory data for selected filters.</div>';
+                } else {
+                    invEl.innerHTML = '';
+                    renderInventoryAnalysis('costChartInvDays', invData.labels, invData.avg_inv_days);
+                    // Populate KPI card
+                    const avgInvDays = invData.avg_inv_days?.length ? (invData.avg_inv_days.reduce((a,b)=>a+b,0)/invData.avg_inv_days.length).toFixed(1) : '—';
+                    if(el('kpiInvDays')) el('kpiInvDays').innerText = avgInvDays+' d';
+                }
+            } catch(ie) {
+                console.error('[Inventory Analysis] error:', ie);
+                invEl.innerHTML = '<div style="background:#fce8e6;border:1px solid #dc3545;border-radius:6px;padding:16px 20px;margin:12px;color:#c0392b;font-size:.85rem;"><strong>⚠️ Inventory Analysis — Error</strong><br><code style="display:block;margin-top:8px;white-space:pre-wrap;">' + ie.message + '</code></div>';
+            }
+        }
+    } catch(e) { console.error('Analysis Load Error', e); }
+}
+
+// ─── PLANT MONTH POPUP ────────────────────────────────────────────────────────
+async function openPlantMonthPopup(plantName, payload) {
+    const popup = document.getElementById('plantMonthPopup');
+    document.getElementById('plantMonthPopupTitle').innerText = `${plantName} — Month Wise Cost Analysis`;
+    document.getElementById('plantMonthPopupChart').innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Loading…</div>';
+    popup.style.display = 'flex';
+
+    try {
+        const data = await postJSON('/api/plant_month_data', { ...payload, plant_name: plantName });
+        if (data.empty || data.error || !data.labels) {
+            document.getElementById('plantMonthPopupChart').innerHTML = '<div style="text-align:center;padding:40px;color:#888;">No data available</div>';
+            return;
+        }
+        const chartDiv = document.getElementById('plantMonthPopupChart');
+        chartDiv.style.height = '360px';
+        const t1 = {
+            x: data.labels, y: data.direct_cost, name: 'Direct Cost', type: 'scatter', mode: 'lines+markers',
+            line: { color: '#cc0000', width: 3 }, marker: { color: '#cc0000', size: 8, line: { color: '#fff', width: 1.5 } },
+            hovertemplate: '<b>Direct Cost</b><br>%{x}: %{y:.2f} L<extra></extra>'
+        };
+        const t2 = {
+            x: data.labels, y: data.fixed_cost, name: 'Fixed Cost', type: 'scatter', mode: 'lines+markers',
+            line: { color: '#003399', width: 3 }, marker: { color: '#003399', size: 8, line: { color: '#fff', width: 1.5 } },
+            hovertemplate: '<b>Fixed Cost</b><br>%{x}: %{y:.2f} L<extra></extra>'
+        };
+        const layout = {
+            margin: { t: 50, b: 60, l: 55, r: 20 },
+            legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.12, bgcolor: 'rgba(255,255,255,0)', font: { size: 13 } },
+            xaxis: { title: 'Month', tickangle: -30 },
+            yaxis: { title: 'Rs in Lacs', showgrid: true, gridcolor: '#f0f0f0', zeroline: true },
+            hovermode: 'closest'
+        };
+        Plotly.newPlot('plantMonthPopupChart', [t1, t2], layout, { responsive: true, displayModeBar: false });
+    } catch(e) {
+        document.getElementById('plantMonthPopupChart').innerHTML = '<div style="text-align:center;padding:40px;color:#c00;">Error loading data</div>';
+        console.error(e);
+    }
+}
+
+function closePlantMonthPopup() {
+    document.getElementById('plantMonthPopup').style.display = 'none';
+}
+
+// ─── BU PLANT PIE POPUP ───────────────────────────────────────────────────────
+async function openBuPlantPopup(buName, payload) {
+    const popup = document.getElementById('buPlantPopup');
+    document.getElementById('buPlantPopupTitle').innerText = `${buName} — Plant-wise Cost Distribution`;
+    document.getElementById('buPlantPopupChart').innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Loading…</div>';
+    popup.style.display = 'flex';
+
+    try {
+        const data = await postJSON('/api/bu_plant_distribution', { ...payload, bu_name: buName });
+        if (data.empty || data.error || !data.plants || !data.plants.length) {
+            document.getElementById('buPlantPopupChart').innerHTML = '<div style="text-align:center;padding:40px;color:#888;">No data available</div>';
+            return;
+        }
+
+        const PIE_COLORS = [
+            '#2ecc71','#3498db','#e74c3c','#f39c12','#9b59b6',
+            '#1abc9c','#e67e22','#34495e','#e91e63','#00bcd4',
+            '#ff5722','#607d8b','#8bc34a','#ff9800','#673ab7'
+        ];
+
+        const trace = {
+            type: 'pie',
+            labels: data.plants,
+            values: data.va_values,
+            hole: 0.35,
+            textinfo: 'label+percent',
+            textposition: 'outside',
+            automargin: true,
+            marker: {
+                colors: data.plants.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]),
+                line: { color: '#fff', width: 2 }
+            },
+            hovertemplate: '<b>%{label}</b><br>VA: %{value:.2f} L<br>Share: %{percent}<extra></extra>'
+        };
+        const layout = {
+            margin: { t: 20, b: 20, l: 20, r: 20 },
+            showlegend: true,
+            legend: { orientation: 'v', x: 1.02, y: 0.5, font: { size: 12 } },
+            paper_bgcolor: '#fff'
+        };
+        Plotly.newPlot('buPlantPopupChart', [trace], layout, { responsive: true, displayModeBar: false });
+    } catch(e) {
+        document.getElementById('buPlantPopupChart').innerHTML = '<div style="text-align:center;padding:40px;color:#c00;">Error loading data</div>';
+        console.error(e);
+    }
+}
+
+function closeBuPlantPopup() {
+    document.getElementById('buPlantPopup').style.display = 'none';
+}
+
+// ─── SEGMENT MONTH POPUP ─────────────────────────────────────────────────────
+async function openSegmentMonthPopup(segmentName, payload) {
+    const popup = document.getElementById('segmentMonthPopup');
+    document.getElementById('segmentMonthPopupTitle').innerText = `${segmentName} — Month Wise Fixed Cost (Rs in Lacs)`;
+    document.getElementById('segmentMonthPopupChart').innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Loading…</div>';
+    popup.style.display = 'flex';
+
+    try {
+        const data = await postJSON('/api/segment_month_data', { ...payload, segment_name: segmentName });
+        if (data.empty || data.error || !data.labels || !data.labels.length) {
+            document.getElementById('segmentMonthPopupChart').innerHTML = '<div style="text-align:center;padding:40px;color:#888;">No data available</div>';
+            return;
+        }
+
+        const BAR_COLORS = [
+            '#7b4fa6','#8c5abf','#9d6bd0','#6b3d94','#a07dc8',
+            '#5b2e82','#c49de0','#4a2070','#b88cd9','#6040a0',
+            '#d4b3f0','#3d1860','#e8ccff','#2a1045','#c090e8'
+        ];
+
+        const trace = {
+            x: data.labels,
+            y: data.fixed_cost,
+            type: 'bar',
+            marker: {
+                color: data.labels.map((_, i) => BAR_COLORS[i % BAR_COLORS.length]),
+                line: { color: '#fff', width: 1 }
+            },
+            hovertemplate: '<b>%{x}</b><br>Fixed Cost: %{y:.2f} L<extra></extra>'
+        };
+        const layout = {
+            margin: { t: 30, b: 70, l: 60, r: 20 },
+            xaxis: { title: 'Month', tickangle: -30, automargin: true },
+            yaxis: { title: 'Rs in Lacs', showgrid: true, gridcolor: '#f0f0f0', zeroline: true },
+            plot_bgcolor: '#fff', paper_bgcolor: '#fff'
+        };
+        const chartEl = document.getElementById('segmentMonthPopupChart');
+        chartEl.style.height = '340px';
+        Plotly.newPlot('segmentMonthPopupChart', [trace], layout, { responsive: true, displayModeBar: false });
+    } catch(e) {
+        document.getElementById('segmentMonthPopupChart').innerHTML = '<div style="text-align:center;padding:40px;color:#c00;">Error loading data</div>';
+        console.error(e);
+    }
+}
+
+function closeSegmentMonthPopup() {
+    document.getElementById('segmentMonthPopup').style.display = 'none';
+}
+
+const _pltLayout = (xTitle, yTitle) => ({ barmode:'group', margin:{t:20,b:50,l:40,r:10}, xaxis:{title:xTitle}, yaxis:{title:yTitle} });
+const _applyText = (trace, y, fmt, pos) => { trace.text=y; trace.texttemplate=fmt; trace.textposition=pos; };
+
+// --- Updated Analysis Chart Helpers ---
+
+function renderDoubleBar(id, labels, y1, y2, xT, showText=true) {
+    const t1 = {
+        x: labels, y: y1, name: 'Sales (L)', type: 'bar',
+        marker: { color: '#A8C8E8' },
+        hovertemplate: '%{y:.2f} L<extra></extra>'
+    };
+    const t2 = {
+        x: labels, y: y2, name: 'VA (L)', type: 'bar',
+        marker: { color: '#F4A7B9' },
+        hovertemplate: '%{y:.2f} L<extra></extra>'
+    };
+    const layout = {
+        ..._pltLayout(xT, ''),
+        yaxis: { showticklabels: true, showgrid: true, gridcolor: '#f5f5f5', zeroline: true }
+    };
+    Plotly.newPlot(id, [t1, t2], layout, { responsive: true, displayModeBar: false });
+}
+
+function renderDoubleLine(id, labels, y1, y2, xT, showText=true, noText=false) {
+    const t1 = {
+        x: labels, y: y1, name: 'Sales (L)', type: 'scatter', mode: 'lines+markers',
+        line: { color: '#A8C8E8', width: 3 },
+        hovertemplate: '%{y:.2f} L<extra></extra>'
+    };
+    const t2 = {
+        x: labels, y: y2, name: 'VA (L)', type: 'scatter', mode: 'lines+markers',
+        line: { color: '#F4A7B9', width: 3 },
+        hovertemplate: '%{y:.2f} L<extra></extra>'
+    };
+    const layout = {
+        ..._pltLayout(xT, ''),
+        yaxis: { showticklabels: true, showgrid: true, gridcolor: '#f5f5f5', zeroline: true }
+    };
+    Plotly.newPlot(id, [t1, t2], layout, { responsive: true, displayModeBar: false });
+}
+
+function renderSingleBar(id, labels, y, xT, showText=true, alphabetical=false) {
+    let xLabels = labels.slice();
+    let yValues = y.slice();
+    if(alphabetical) {
+        const pairs = labels.map((l, i) => ({ l, v: y[i] }));
+        pairs.sort((a, b) => a.l.toString().localeCompare(b.l.toString(), undefined, { sensitivity: 'base' }));
+        xLabels = pairs.map(p => p.l);
+        yValues = pairs.map(p => p.v);
+    }
+
+    // Color bars: positive = distinct palette, negative = red
+    const RCA_PALETTE = [
+        '#60A5FA','#34D399','#FBBF24','#A78BFA','#F472B6',
+        '#38BDF8','#4ADE80','#FB923C','#818CF8','#E879F9',
+        '#2DD4BF','#FCD34D','#F87171','#A3E635','#7DD3FC'
+    ];
+    const barColors = yValues.map((v, i) => v < 0 ? '#FCA5A5' : RCA_PALETTE[i % RCA_PALETTE.length]);
+    const borderColors = yValues.map((v, i) => v < 0 ? '#DC2626' : RCA_PALETTE[i % RCA_PALETTE.length]);
+
+    const t = {
+        x: xLabels, y: yValues, type: 'bar',
+        marker: { color: barColors, line: { color: borderColors, width: 0 },
+                  opacity: 0.85 },
+        hovertemplate: '<b>%{x}</b><br>EBIT: %{y:.2f} L<extra></extra>'
+    };
+    const layout = {
+        plot_bgcolor:  '#fff',
+        paper_bgcolor: '#fff',
+        margin: { t: 16, b: 60, l: 50, r: 10 },
+        xaxis: {
+            title: { text: xT, font: { size: 11, color: '#9ca3af' } },
+            showgrid: false, linecolor: '#e5e7eb',
+            tickfont: { size: 10, color: '#6b7280' },
+            tickangle: -20,
+            ...(alphabetical ? { type: 'category', categoryorder: 'array', categoryarray: xLabels } : {})
+        },
+        yaxis: { showgrid: true, gridcolor: '#f3f4f6', zeroline: true,
+                 zerolinecolor: '#9ca3af', zerolinewidth: 1,
+                 tickfont: { size: 10, color: '#6b7280' } },
+        bargap: 0.35,
+        shapes: [{ type: 'line', x0: 0, x1: 1, xref: 'paper',
+                   y0: 0, y1: 0, yref: 'y',
+                   line: { color: '#9ca3af', width: 1 } }]
+    };
+    Plotly.newPlot(id, [t], layout, { responsive: true, displayModeBar: false });
+}
+
+function renderLineChart(id, labels, y, yTitle, showText=true) {
+    const t = {
+        x: labels, y: y, type: 'scatter', mode: 'lines+markers',
+        line: { color: '#C9B8E8', width: 3 },
+        hovertemplate: '%{y:.2f}%<extra></extra>'
+    };
+    const layout = {
+        margin: { t: 20, b: 50, l: 40, r: 10 },
+        yaxis: { showticklabels: true, showgrid: true, gridcolor: '#f5f5f5', zeroline: true }
+    };
+    Plotly.newPlot(id, [t], layout, { responsive: true, displayModeBar: false });
+}
+
+// Month Wise Cost Analysis: Direct Cost (Sales-VA) and Fixed Cost (VA-EBIT) lines
+// RCA style: smooth spline, light area fill, clean white bg, dotted reference
+function renderMonthCostLines(id, labels, directCost, fixedCost, costData) {
+    window._monthCostData = { labels, directCost, fixedCost, costData };
+
+    const baseLayout = {
+        plot_bgcolor:  '#fff',
+        paper_bgcolor: '#fff',
+        margin: { t: 50, b: 80, l: 55, r: 20 },
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.14,
+                  bgcolor: 'rgba(255,255,255,0)', font: { size: 12, color: '#555' } },
+        xaxis: { title: 'Month', tickangle: -30, showgrid: false, automargin: true,
+                 linecolor: '#e5e7eb', tickfont: { size: 11, color: '#6b7280' } },
+        yaxis: { title: 'Rs in Lacs', showgrid: true, gridcolor: '#f3f4f6',
+                 zeroline: false, tickfont: { size: 11, color: '#6b7280' },
+                 titlefont: { size: 11, color: '#9ca3af' } },
+        hovermode: 'closest',
+        hoverlabel: { bgcolor: '#fff', bordercolor: '#e5e7eb', font: { size: 12 } }
+    };
+
+    const t1 = {
+        x: labels, y: directCost, name: 'Direct Cost',
+        type: 'scatter', mode: 'lines+markers',
+        line: { color: '#DC2626', width: 2.5, shape: 'spline' },
+        marker: { color: '#DC2626', size: 7, line: { color: '#fff', width: 1.5 } },
+        fill: 'tozeroy', fillcolor: 'rgba(220,38,38,0.06)',
+        hovertemplate: '<b>Direct Cost</b>: %{y:.2f} L<extra></extra>'
+    };
+    const t2 = {
+        x: labels, y: fixedCost, name: 'Fixed Cost',
+        type: 'scatter', mode: 'lines+markers',
+        line: { color: '#2563EB', width: 2.5, shape: 'spline', dash: 'dot' },
+        marker: { color: '#2563EB', size: 7, line: { color: '#fff', width: 1.5 } },
+        fill: 'tozeroy', fillcolor: 'rgba(37,99,235,0.04)',
+        hovertemplate: '<b>Fixed Cost</b>: %{y:.2f} L<extra></extra>'
+    };
+
+    const chartEl = document.getElementById(id);
+    chartEl.style.height = '340px';
+    Plotly.newPlot(id, [t1, t2], baseLayout, { responsive: true, displayModeBar: false });
+
+    chartEl.on('plotly_click', function(eventData) {
+        if (!eventData?.points?.length) return;
+        const pt = eventData.points[0];
+        openMonthCostPopup(labels[pt.pointIndex], pt.pointIndex, costData);
+    });
+}
+
+// Segment Wise Cost Analysis: Direct Cost and Fixed Cost lines per segment (RCA style)
+function renderSegmentCostLines(id, labels, directCost, fixedCost) {
+    const pairs = labels.map((l, i) => ({ l, d: directCost[i], f: fixedCost[i] }));
+    pairs.sort((a, b) => a.l.toString().localeCompare(b.l.toString(), undefined, { sensitivity: 'base' }));
+    const sortedLabels = pairs.map(p => p.l);
+    const sortedDirect = pairs.map(p => p.d);
+    const sortedFixed  = pairs.map(p => p.f);
+
+    const t1 = {
+        x: sortedLabels, y: sortedDirect, name: 'Direct Cost', type: 'scatter', mode: 'lines+markers',
+        line: { color: '#DC2626', width: 2.5, shape: 'spline' },
+        marker: { color: '#DC2626', size: 7, line: { color: '#fff', width: 1.5 } },
+        fill: 'tozeroy', fillcolor: 'rgba(220,38,38,0.06)',
+        hovertemplate: '<b>Direct Cost</b> — %{x}: %{y:.2f} L<extra></extra>'
+    };
+    const t2 = {
+        x: sortedLabels, y: sortedFixed, name: 'Fixed Cost', type: 'scatter', mode: 'lines+markers',
+        line: { color: '#2563EB', width: 2.5, shape: 'spline', dash: 'dot' },
+        marker: { color: '#2563EB', size: 7, line: { color: '#fff', width: 1.5 } },
+        fill: 'tozeroy', fillcolor: 'rgba(37,99,235,0.04)',
+        hovertemplate: '<b>Fixed Cost</b> — %{x}: %{y:.2f} L<extra></extra>'
+    };
+    const layout = {
+        plot_bgcolor: '#fff', paper_bgcolor: '#fff',
+        margin: { t: 50, b: 70, l: 55, r: 20 },
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.14,
+                  bgcolor: 'rgba(255,255,255,0)', font: { size: 12, color: '#555' } },
+        xaxis: { tickangle: -30, automargin: true, showgrid: false,
+                 tickfont: { size: 10, color: '#6b7280' } },
+        yaxis: { showgrid: true, gridcolor: '#f3f4f6', zeroline: false,
+                 tickfont: { size: 11, color: '#6b7280' } },
+        hovermode: 'x unified'
+    };
+    const chartEl = document.getElementById(id);
+    chartEl.style.height = '380px';
+    Plotly.newPlot(id, [t1, t2], layout, { responsive: true, displayModeBar: false });
+
+    chartEl.on('plotly_click', function(eventData) {
+        if (!eventData?.points?.length) return;
+        const pt = eventData.points[0];
+        if (pt.data.name !== 'Fixed Cost') return;
+        openSegmentMonthPopup(sortedLabels[pt.pointIndex], window._lastAnalysisPayload);
+    });
+}
+
+// ── Stock Analysis: 3-line chart (RCA style) ──
+function renderStockAnalysis(id, labels, amount, nonMoving, slowMoving) {
+    window._stockData = { labels, amount, nonMoving, slowMoving };
+
+    const mkLine = (y, name, color, fillcolor, dash) => ({
+        x: labels, y, name, type: 'scatter', mode: 'lines+markers',
+        line: { color, width: 2.5, shape: 'spline', ...(dash ? { dash } : {}) },
+        marker: { color, size: 7, line: { color: '#fff', width: 1.5 } },
+        fill: 'tozeroy', fillcolor,
+        hovertemplate: `<b>${name}</b>: ₹%{y:.2f} L — <i>click to view breakdown</i><extra></extra>`
+    });
+
+    const traces = [
+        mkLine(nonMoving,  'Non Moving',  '#D97706', 'rgba(217,119,6,0.06)', 'dot'),
+        mkLine(slowMoving, 'Slow Moving', '#2563EB', 'rgba(37,99,235,0.05)', 'dash')
+    ];
+    const layout = {
+        plot_bgcolor: '#fff', paper_bgcolor: '#fff',
+        margin: { t: 50, b: 55, l: 60, r: 20 },
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.14,
+                  bgcolor: 'rgba(255,255,255,0)', font: { size: 12, color: '#555' } },
+        xaxis: { tickangle: -20, showgrid: false, tickfont: { size: 11, color: '#6b7280' } },
+        yaxis: { showgrid: true, gridcolor: '#f3f4f6', zeroline: false,
+                 tickfont: { size: 11, color: '#6b7280' } },
+        hovermode: 'closest'
+    };
+    const chartEl = document.getElementById(id);
+    chartEl.style.height = '340px';
+    Plotly.newPlot(id, traces, layout, { responsive: true, displayModeBar: false });
+
+    // Map trace name to metric column
+    const metricMap = { 'Closing Stock': 'amount', 'Non Moving': 'non_moving', 'Slow Moving': 'slow_moving' };
+
+    chartEl.on('plotly_click', function(eventData) {
+        if (!eventData?.points?.length) return;
+        const pt     = eventData.points[0];
+        const metric = metricMap[pt.data.name] || 'amount';
+        openStockMonthMatrixPopup(pt.x, window._lastAnalysisPayload, metric, pt.data.name);
+    });
+}
+
+// ── Stock Ageing: stacked bar chart (RCA style) ──
+function renderStockAgeing(id, d) {
+    const chartEl = document.getElementById(id);
+    chartEl.style.height = '340px';
+
+    const AGEING_COLORS = { below_30:'#22C55E', '30_to_60':'#EAB308', '60_to_90':'#F97316', above_90:'#EF4444' };
+    const LABELS        = { below_30:'Below 30d', '30_to_60':'30–60d', '60_to_90':'60–90d', above_90:'Above 90d' };
+
+    const traces = ['below_30','30_to_60','60_to_90','above_90'].map(b => ({
+        x: d.labels, y: d[b], name: LABELS[b], type: 'bar',
+        marker: { color: AGEING_COLORS[b], line: { color: '#fff', width: 0.8 } },
+        hovertemplate: '<b>' + LABELS[b] + '</b>: ₹%{y:.2f} L<extra></extra>'
+    }));
+
+    const layout = {
+        barmode: 'stack',
+        plot_bgcolor: '#fff', paper_bgcolor: '#fff',
+        margin: { t: 46, b: 80, l: 60, r: 14 },
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.14,
+                  font: { size: 11, color: '#555' }, bgcolor: 'rgba(255,255,255,0)' },
+        xaxis: { tickangle: -30, showgrid: false, tickfont: { size: 11, color: '#6b7280' }, automargin: true },
+        yaxis: { showgrid: true, gridcolor: '#f3f4f6', zeroline: false,
+                 tickfont: { size: 11, color: '#6b7280' } },
+        hovermode: 'x unified', bargap: 0.3
+    };
+
+    Plotly.newPlot(id, traces, layout, { responsive: true, displayModeBar: false });
+
+    chartEl.on('plotly_click', function(eventData) {
+        if (!eventData?.points?.length) return;
+        openStockAgeingPopup(eventData.points[0].x, window._lastAnalysisPayload);
+    });
+}
+
+// ── Inventory Analysis: avg inventory days per month (RCA style) ──
+function renderInventoryAnalysis(id, labels, avgDays) {
+    const chartEl = document.getElementById(id);
+    chartEl.style.height = '340px';
+
+    const pointColors = avgDays.map(v => v <= 30 ? '#22C55E' : v <= 60 ? '#D97706' : '#EF4444');
+
+    const trace = {
+        x: labels, y: avgDays, type: 'scatter', mode: 'lines+markers',
+        name: 'Avg Inventory Days',
+        line:   { color: '#8B0000', width: 2.5, shape: 'spline' },
+        marker: { color: pointColors, size: 8, line: { color: '#fff', width: 1.5 } },
+        fill: 'tozeroy', fillcolor: 'rgba(139,0,0,0.07)',
+        hovertemplate: '<b>%{x}</b> — %{y:.1f} days<extra></extra>'
+    };
+
+    const maxDays = Math.max(...avgDays);
+    const minDays = Math.min(...avgDays);
+    const yPad    = (maxDays - minDays) * 0.1 || 5;
+
+    const layout = {
+        plot_bgcolor: '#fff', paper_bgcolor: '#fff',
+        margin: { t: 30, b: 60, l: 60, r: 28 },
+        xaxis: { tickangle: -30, showgrid: false, tickfont: { size: 11, color: '#6b7280' }, automargin: true },
+        yaxis: { showgrid: true, gridcolor: '#f3f4f6', zeroline: false,
+                 range: [maxDays + yPad, Math.max(0, minDays - yPad)],
+                 tickfont: { size: 11, color: '#6b7280' } },
+        hovermode: 'x unified'
+    };
+
+    Plotly.newPlot(id, [trace], layout, { responsive: true, displayModeBar: false });
+
+    chartEl.on('plotly_click', function(eventData) {
+        if (!eventData?.points?.length) return;
+        openInvMonthPopup(eventData.points[0].x, window._lastAnalysisPayload);
+    });
+}
+
+// ── Inventory Month Popup — Plant & BU tabs ──────────────────────────────────
+async function openInvMonthPopup(month, payload) {
+    const popup = document.getElementById('invMonthPopup');
+    document.getElementById('invMonthPopupTitle').innerText = `Inventory Analysis — ${month}`;
+    // Reset tabs to Plant tab active
+    document.getElementById('invTabPlant').classList.add('inv-tab-active');
+    document.getElementById('invTabBU').classList.remove('inv-tab-active');
+    document.getElementById('invPanelPlant').style.display = 'block';
+    document.getElementById('invPanelBU').style.display    = 'none';
+    document.getElementById('invChartPlant').innerHTML     = '<div style="text-align:center;padding:40px;color:#888;"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
+    document.getElementById('invChartBU').innerHTML        = '';
+    popup.style.display = 'flex';
+
+    try {
+        const data = await postJSON('/api/inventory_month_breakdown', { ...payload, month_name: month });
+        if (data.error || data.empty) {
+            document.getElementById('invChartPlant').innerHTML = '<div style="text-align:center;padding:40px;color:#888;">No data for ' + month + '</div>';
+            return;
+        }
+        renderInvBreakdownBar('invChartPlant', data.plants, data.plant_days, 'Plant', '#8B0000');
+        // BU chart rendered lazily when tab clicked (data already available)
+        window._invBUData = { bus: data.bus, bu_days: data.bu_days };
+    } catch(e) {
+        document.getElementById('invChartPlant').innerHTML = '<div style="text-align:center;padding:40px;color:#c00;">Error: ' + e.message + '</div>';
+    }
+}
+
+function switchInvTab(tab) {
+    const isPlant = tab === 'plant';
+    document.getElementById('invTabPlant').classList.toggle('inv-tab-active', isPlant);
+    document.getElementById('invTabBU').classList.toggle('inv-tab-active', !isPlant);
+    document.getElementById('invPanelPlant').style.display = isPlant ? 'block' : 'none';
+    document.getElementById('invPanelBU').style.display    = isPlant ? 'none' : 'block';
+
+    if (!isPlant && window._invBUData) {
+        const d = window._invBUData;
+        if (document.getElementById('invChartBU').innerHTML.trim() === '') {
+            renderInvBreakdownBar('invChartBU', d.bus, d.bu_days, 'BU', '#1a4b8c');
+        }
+    }
+}
+
+function renderInvBreakdownBar(id, labels, values, xTitle, baseColor) {
+    const el = document.getElementById(id);
+    el.style.height = '340px';
+
+    // Colour bars by threshold
+    const barColors = values.map(v =>
+        v <= 30 ? '#16a34a' : v <= 60 ? '#d97706' : '#dc2626'
+    );
+
+    const trace = {
+        x: labels,
+        y: values,
+        type: 'bar',
+        marker: { color: barColors, line: { color: '#fff', width: 1 } },
+        hovertemplate: '<b>%{x}</b><br>Avg Inventory Days: <b>%{y:.1f}</b> days<extra></extra>'
+    };
+
+    // Reference lines
+    const shapes = [
+        { type:'line', x0:-0.5, x1:labels.length-0.5, xref:'x', y0:30, y1:30, yref:'y',
+          line:{ color:'#16a34a', width:1.5, dash:'dot' } },
+        { type:'line', x0:-0.5, x1:labels.length-0.5, xref:'x', y0:60, y1:60, yref:'y',
+          line:{ color:'#d97706', width:1.5, dash:'dot' } }
+    ];
+    const maxY = Math.max(...values, 65);
+    const annotations = [
+        { x: labels.length - 0.5, y: 30, xref:'x', yref:'y', text:'30d', showarrow:false,
+          font:{size:9,color:'#16a34a'}, xanchor:'right', yanchor:'bottom' },
+        { x: labels.length - 0.5, y: 60, xref:'x', yref:'y', text:'60d', showarrow:false,
+          font:{size:9,color:'#d97706'}, xanchor:'right', yanchor:'bottom' }
+    ];
+
+    const layout = {
+        margin: { t: 20, b: 70, l: 60, r: 20 },
+        xaxis: { title: xTitle, tickangle: -30, automargin: true },
+        yaxis: { title: 'Avg Inventory Days', showgrid: true, gridcolor: '#f0f0f0',
+                 zeroline: true, range: [0, maxY * 1.12] },
+        shapes, annotations,
+        plot_bgcolor: '#fff', paper_bgcolor: '#fff'
+    };
+
+    Plotly.newPlot(id, [trace], layout, { responsive: true, displayModeBar: false });
+}
+
+function closeInvMonthPopup() {
+    document.getElementById('invMonthPopup').style.display = 'none';
+    window._invBUData = null;
+}
+
+function openMonthCostPopup(month, idx, costData) {
+    const COST_LABELS = {
+        cost_printing: 'Printing', cost_lamination: 'Lamination', cost_hotmelt: 'Hotmelt',
+        cost_metalling: 'Metalling', cost_embossing: 'Embossing', cost_jobwork: 'Jobwork',
+        cost_slitting: 'Slitting', cost_packing: 'Packing', cost_cost_to_serve: 'Cost to Serve'
+    };
+    // Build popup HTML
+    let rows = '';
+    let total = 0;
+    Object.entries(COST_LABELS).forEach(([key, label]) => {
+        const val = costData && costData[key] ? (costData[key][idx] || 0) : 0;
+        total += val;
+        rows += `<tr>
+            <td style="padding:8px 14px;border-bottom:1px solid #eee;font-size:.88rem;color:#333;">${label}</td>
+            <td style="padding:8px 14px;border-bottom:1px solid #eee;text-align:right;font-size:.88rem;font-weight:600;color:#003399;">${val.toFixed(2)} L</td>
+        </tr>`;
+    });
+
+    const popup = document.getElementById('monthCostPopup');
+    document.getElementById('monthCostPopupTitle').innerText = `Fixed Cost Breakdown — ${month}`;
+    document.getElementById('monthCostPopupBody').innerHTML = rows;
+    document.getElementById('monthCostPopupTotal').innerText = `Total: ${total.toFixed(2)} L`;
+    popup.style.display = 'flex';
+}
+
+function closeMonthCostPopup() {
+    document.getElementById('monthCostPopup').style.display = 'none';
+}
+
+// ── COLOUR PALETTES ──────────────────────────────────────────────────────────
+// RCA-style modern palette for profit charts
+const MULTI_BAR_COLORS = [
+    '#60A5FA','#34D399','#FBBF24','#A78BFA','#F472B6',
+    '#38BDF8','#4ADE80','#FB923C','#818CF8','#E879F9',
+    '#2DD4BF','#FCD34D','#F87171','#A3E635','#7DD3FC'
+];
+// Darker variants for Plant cost chart
+const MULTI_BAR_COLORS_DARK = [
+    '#2563EB','#059669','#D97706','#7C3AED','#DB2777',
+    '#0891B2','#16A34A','#EA580C','#4F46E5','#9333EA',
+    '#0D9488','#CA8A04','#DC2626','#65A30D','#0284C7'
+];
+// Per-chart solid colours for BU and Segment cost charts
+const CHART_SOLID_COLORS = { costChartBU: '#2b8a94', costChartSeg: '#E2C4F0' };
+
+// Single bar with x-axis in alphabetical order (Plant, BU, Segment cost charts — VA only)
+function renderSingleBarSorted(id, labels, values, sortKeys, xT) {
+    const pairs = labels.map((l, i) => ({ l, v: values[i] }));
+    pairs.sort((a, b) => a.l.toString().localeCompare(b.l.toString(), undefined, { sensitivity: 'base' }));
+    const sortedLabels = pairs.map(p => p.l);
+    const sortedValues = pairs.map(p => p.v);
+
+    // Plant → each bar a distinct teal-family shade; BU/others → solid teal
+    const TEAL_PALETTE = [
+        '#0891B2','#0E7490','#06B6D4','#164E63','#22D3EE',
+        '#155E75','#67E8F9','#0C4A6E','#38BDF8','#0369A1',
+        '#7DD3FC','#1E40AF','#BAE6FD','#1D4ED8','#93C5FD'
+    ];
+    let barColor;
+    if (id === 'costChartPlant') {
+        barColor = sortedLabels.map((_, i) => TEAL_PALETTE[i % TEAL_PALETTE.length]);
+    } else if (id === 'costChartBU') {
+        barColor = sortedValues.map((_, i) => TEAL_PALETTE[i % TEAL_PALETTE.length]);
+    } else {
+        barColor = '#2b8a94';
+    }
+
+    const t = {
+        x: sortedLabels, y: sortedValues,
+        name: 'VA (L)', type: 'bar',
+        marker: { color: barColor, opacity: 0.88, line: { width: 0 } },
+        hovertemplate: '<b>%{x}</b><br>Value: %{y:.2f} L<extra></extra>'
+    };
+    const layout = {
+        plot_bgcolor:  '#fff',
+        paper_bgcolor: '#fff',
+        margin: { t: 16, b: 80, l: 55, r: 10 },
+        bargap: 0.35,
+        xaxis: {
+            title: { text: xT, font: { size: 11, color: '#9ca3af' } },
+            type: 'category', categoryorder: 'array', categoryarray: sortedLabels,
+            showgrid: false, linecolor: '#e5e7eb',
+            tickfont: { size: 10, color: '#6b7280' }, tickangle: -20, automargin: true
+        },
+        yaxis: { showgrid: true, gridcolor: '#f3f4f6', zeroline: true,
+                 zerolinecolor: '#d1d5db', tickfont: { size: 10, color: '#6b7280' },
+                 automargin: true }
+    };
+    Plotly.newPlot(id, [t], layout, { responsive: true, displayModeBar: false });
+}
+
+// ─── POPUP ────────────────────────────────────────────────────────────────────
+async function openDetailPopup(name, viewType) {
+    el('popupTitle').innerText = `${name} — Breakdown`;
+    el('colNameHeader').innerText = viewType === 'customer' ? 'Product Name' : 'Customer Name';
+    const tbody = el('popupTableBody');
+    el('popupRowCount').innerText = '';
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:20px;color:#888;">Loading…</td></tr>';
+    el('dataPopup').style.display = 'flex';
+
+    const payload = { ...getBasePayload(), quarters:Array.from(state.quarters), months:Array.from(state.months), target_name:name, view_type:viewType };
+    const COST_KEYS = ['cost_printing','cost_lamination','cost_hotmelt','cost_metalling','cost_embossing','cost_jobwork','cost_slitting','cost_packing','cost_cost_to_serve'];
+
+    try {
+        const data = await postJSON('/api/get_point_details', payload);
+        tbody.innerHTML = '';
+        if(data.data?.length) {
+            el('popupRowCount').innerText = `${data.data.length} row${data.data.length > 1 ? 's' : ''}`;
+            const frag = document.createDocumentFragment();
+            const fmt = v => (parseFloat(v)||0).toLocaleString('en-IN',{maximumFractionDigits:0});
+            data.data.forEach((row, i) => {
+                const tr = document.createElement('tr');
+                tr.style.background = i%2===0 ? '#fff' : '#f9f9f9';
+                const tdName = document.createElement('td');
+                tdName.style.cssText = 'position:sticky;left:0;background:inherit;font-weight:600;border-bottom:1px solid #eee;padding:7px 8px;';
+                tdName.textContent = row.name || '—';
+                tr.appendChild(tdName);
+                ['volume','sales','ebit',...COST_KEYS].forEach(col => {
+                    const td = document.createElement('td');
+                    const val = parseFloat(row[col]) || 0;
+                    td.textContent = fmt(val);
+                    td.style.cssText = 'text-align:right;border-bottom:1px solid #eee;padding:7px 8px;white-space:nowrap;';
+                    if(col === 'ebit') { td.style.fontWeight='700'; td.style.color = val>0?'#137333':val<0?'#c5221f':'#555'; }
+                    tr.appendChild(td);
+                });
+                frag.appendChild(tr);
+            });
+            tbody.appendChild(frag);
+        } else {
+            tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:#888;">${data.error?'Error: '+data.error:'No data found'}</td></tr>`;
+        }
+    } catch(e) {
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:20px;color:#c5221f;">Network error — could not load data.</td></tr>';
+        console.error('Popup load error:', e);
+    }
+}
+
+function closePopup() { el('dataPopup').style.display='none'; }
+
+// ─── SUMMARY DASHBOARD ────────────────────────────────────────────────────────
+async function loadSummaryData() {
+    const payload = getBasePayload();
+
+    function getEpcPayload(suffix) {
+        const p = {...payload};
+        const ebitLoss   = el(`ebitLossInput${suffix}`)?.value;
+        const ebitProfit = el(`ebitProfitInput${suffix}`)?.value;
+        const volLow     = el(`volLowInput${suffix}`)?.value;
+        const volHigh    = el(`volHighInput${suffix}`)?.value;
+        if(ebitLoss   !== undefined && ebitLoss   !== '') p.ebit_loss   = ebitLoss;
+        if(ebitProfit !== undefined && ebitProfit !== '') p.ebit_profit = ebitProfit;
+        if(volLow     !== undefined && volLow     !== '') p.vol_low     = volLow;
+        if(volHigh    !== undefined && volHigh    !== '') p.vol_high    = volHigh;
+        return p;
+    }
+
+    try {
+        const [prodData, custData] = await Promise.all([
+            postJSON('/api/matrix_data', {...getEpcPayload('Prod'), matrix_type:'product'}),
+            postJSON('/api/matrix_data', {...getEpcPayload('Cust'), matrix_type:'customer'})
+        ]);
+        if(!prodData.meta || !custData.meta) return;
+        renderRevealScorecard(prodData, 'productScorecardBody');
+        renderRevealScorecard(custData, 'customerScorecardBody');
+        renderWhaleCurveWithSummary(prodData, 'productWhaleCurve',  'productWhaleSummary',  'Products',  'product',  payload);
+        renderWhaleCurveWithSummary(custData, 'customerWhaleCurve', 'customerWhaleSummary', 'Customers', 'customer', payload);
+        renderBUWhaleCurves(payload, 'product',  'buWhaleCurvesContainer');
+        renderBUWhaleCurves(payload, 'customer', 'buCustomerWhaleCurvesContainer');
+    } catch(e) { console.error('Summary Load Error:', e); }
+}
+
+function renderRevealScorecard(data, tableBodyId) {
+    const totalEbit = data.meta ? (data.meta.total_ebit || 0) : 0;
+
+    // Aggregate from EPC matrix buckets
+    const profitKeys = ['Low_Profit', 'Moderate_Profit', 'High_Profit'];
+    const lossKeys   = ['Low_Loss',   'Moderate_Loss',   'High_Loss'];
+    const beKeys     = ['Low_BE',     'Moderate_BE',     'High_BE'];
+
+    function sumBuckets(keys) {
+        return keys.reduce((acc, k) => {
+            const b = data[k];
+            if (b) { acc.count += (b.count || 0); acc.ebit += (b.total_box_ebit || 0); }
+            return acc;
+        }, { count: 0, ebit: 0 });
+    }
+
+    const profitGiving = sumBuckets(profitKeys);
+    const lossGiving   = sumBuckets(lossKeys);
+    const breakEven    = sumBuckets(beKeys);
+
+    const profitPct = totalEbit !== 0 ? Math.round((profitGiving.ebit / totalEbit) * 100) : 0;
+    const lossPct   = totalEbit !== 0 ? Math.round((lossGiving.ebit   / totalEbit) * 100) : 0;
+
+    const row = (label, count, profit, pct, bold) =>
+        `<tr${bold?' style="font-weight:700;background:#f8f9fa;"':''}>
+            <td class="sc-td"${bold?'':' style="font-weight:600;"'}>${label}</td>
+            <td class="sc-td-c">${count}</td><td class="sc-td-r">${profit}</td><td class="sc-td-r">${pct}</td>
+        </tr>`;
+
+    el(tableBodyId).innerHTML =
+        row('Profit Giving', profitGiving.count, formatK(profitGiving.ebit), profitPct+'%') +
+        row('Loss Giving',   lossGiving.count,   formatK(lossGiving.ebit),   lossPct+'%') +
+        row('Break-even',    breakEven.count,     formatK(0),                 '0%') +
+        row('Total',         profitGiving.count + lossGiving.count + breakEven.count, formatK(totalEbit), '100%', true);
+}
+
+function renderWhaleCurveWithSummary(data, chartId, summaryId, label, type, payload) {
+    const allItems = [];
+    Object.keys(data).forEach(key => {
+        if(key !== 'meta' && data[key].details) data[key].details.forEach(item => allItems.push({ name:item.name, ebit:parseFloat(item.ebit), sales:parseFloat(item.sales) }));
+    });
+    const sorted = allItems.sort((a, b) => b.ebit - a.ebit);
+    let sum = 0;
+    const cumulative = sorted.map(p => parseFloat((sum += p.ebit/100000).toFixed(2)));
+    const elmt = el(chartId);
+    if(!elmt) return;
+    elmt.innerHTML = '';
+    Plotly.newPlot(chartId, [{
+        x:sorted.map(p=>p.name), y:cumulative, customdata:sorted.map(p=>p.ebit/100000),
+        type:'scatter', mode:'lines+markers',
+        line:{color:'#8B0000',width:3,shape:'spline'}, marker:{size:6,color:'#333'},
+        fill:'tozeroy', fillcolor:'rgba(139,0,0,0.05)', hovertemplate:whaleTmpl
+    }], {
+        autosize:true, height:420, margin:{t:30,b:120,l:70,r:20},
+        xaxis:{title:label, tickangle:-45, automargin:true, tickfont:{size:10}},
+        yaxis:{title:'Cumulative EBIT (Lakhs)', titlefont:{size:12}},
+        plot_bgcolor:'#fff', paper_bgcolor:'#fff'
+    }, {responsive:true, displayModeBar:false});
+    setTimeout(() => { try { Plotly.Plots.resize(el(chartId)); } catch(e){} }, 150);
+    generateWhaleSummary(data, allItems, sorted, type, payload, summaryId);
+}
+
+function generateWhaleSummary(data, allItems, sortedItems, type, payload, summaryId) {
+    const itemType = type === 'product' ? 'products' : 'customers';
+    const itemTypeSingular = type === 'product' ? 'product' : 'customer';
+    const profitMakers = sortedItems.filter(p => p.ebit > 0);
+    const lossMakers   = sortedItems.filter(p => p.ebit < 0);
+    const profitSum = profitMakers.reduce((s, p) => s+p.ebit, 0);
+    const lossSum   = lossMakers.reduce((s, p)   => s+p.ebit, 0);
+    const totalEbit  = data.meta.total_ebit  || 0;
+    const totalSales = data.meta.total_sales || 0;
+    const profitPct  = ((profitMakers.length/allItems.length)*100).toFixed(0);
+    const lossPct    = ((lossMakers.length/allItems.length)*100).toFixed(0);
+    const top20Count = Math.ceil(allItems.length * 0.2);
+    const top20Items = sortedItems.slice(0, top20Count);
+    const top20Ebit  = top20Items.reduce((s, p) => s+p.ebit, 0);
+    const top20Sales = top20Items.reduce((s, p) => s+p.sales, 0);
+
+    const curveDescription = lossMakers.length > allItems.length * 0.5
+        ? "upward and prolonged stagnated whale curve which drops steadily"
+        : lossMakers.length > allItems.length * 0.3
+            ? "moderately concentrated whale curve with significant loss-making segment"
+            : "healthy whale curve with limited loss makers";
+
+    const fyText = payload.years[0] !== 'All' ? `FY ${payload.years[0]}` : 'the analyzed period';
+
+    let summary = `The representation of profit concentration provided by a whale curve can be eye-opening. Understanding how few ${itemType} create profit and how many destroy it can be a firm's call-to-action to identify and remove complexity costs. `;
+    summary += `Qber has a <strong>${curveDescription}</strong>. This indicates that there ${lossMakers.length > allItems.length * 0.5 ? 'are a sizeable number of' : 'are some'} ${itemType} which give very little or no profits. `;
+    summary += `The methodology used is Activity Based Costing, which places costs on activities to derive true ${itemTypeSingular} costs through the activities they consume. `;
+    summary += `In Qber for ${fyText}, <strong>${profitPct}%</strong> of the ${itemType} sold gave a profit of <strong>${formatK(profitSum)}</strong>, whereas <strong>${lossPct}%</strong> of the ${itemType} eroded <strong>${formatK(Math.abs(lossSum))}</strong> bringing the overall profit to <strong>${formatK(totalEbit)}</strong>. `;
+    if(top20Sales > 0 && totalSales > 0) {
+        const salesPct    = ((top20Sales/totalSales)*100).toFixed(0);
+        const profitTimes = totalEbit > 0 ? (top20Ebit/totalEbit).toFixed(1) : 0;
+        summary += `Interestingly, it also indicates that <strong>${salesPct}%</strong> of the sales (<strong>${formatK(top20Sales)}</strong>) give nearly <strong>${profitTimes} times</strong> the realized profit of Qber.`;
+    }
+    el(summaryId).innerHTML = `<p style="margin:0;font-size:.95rem;line-height:1.8;color:#374151;text-align:justify;">${summary}</p>`;
+}
+
+async function renderBUWhaleCurves(basePayload, matrixType='product', containerId='buWhaleCurvesContainer', summaryContainerId=null, useMatrixDB=false) {
+    const container = el(containerId);
+    if(!container) return;
+    // Determine matching summaries container — caller can override
+    if(!summaryContainerId) {
+        summaryContainerId = matrixType === 'product' ? 'buProductSummariesContainer' : 'buCustomerSummariesContainer';
+    }
+    const summaryContainer = el(summaryContainerId);
+    const itemLabel = matrixType === 'product' ? 'Products' : 'Customers';
+    const itemType  = matrixType === 'product' ? 'products' : 'customers';
+    const lineColor = '#8B0000', fillColor = 'rgba(139,0,0,0.1)';
+
+    // Route BU whale curve calls to the correct database
+    const buEndpoint = useMatrixDB ? '/api/matrix_data_old' : '/api/matrix_data';
+
+    // Clear both grids
+    container.innerHTML = '';
+    if(summaryContainer) summaryContainer.innerHTML = '';
+
+    try {
+        const allBUs = Array.from(el('buSelect').options).map(o => o.value).filter(v => v !== 'All');
+        if(!allBUs.length) {
+            container.innerHTML = '<div style="text-align:center;padding:40px;color:#999;">No BU data available</div>';
+            return;
+        }
+
+        for(const bu of allBUs) {
+            const data = await postJSON(buEndpoint, {...basePayload, bu, matrix_type:matrixType});
+            if(!data.meta) continue;
+
+            const items = [];
+            Object.keys(data).forEach(key => {
+                if(key !== 'meta' && data[key].details) data[key].details.forEach(item => items.push({ name:item.name, ebit:parseFloat(item.ebit), sales:parseFloat(item.sales||0) }));
+            });
+            if(!items.length) continue;
+
+            const sorted = items.sort((a, b) => b.ebit - a.ebit);
+            let sum = 0;
+            const cumulative = sorted.map(p => parseFloat((sum += p.ebit/100000).toFixed(2)));
+
+            // Chart
+            const safeId = bu.replace(/[^a-zA-Z0-9]/g, '_');
+            const chartId = `buChart_${matrixType}_${safeId}`;
+            const chartDiv = document.createElement('div');
+            chartDiv.className = 'bu-chart-card';
+            // Inline style ensures Plotly always sees a real pixel height regardless of CSS
+            chartDiv.innerHTML = `<h4 class="bu-chart-title">${bu}</h4><div id="${chartId}" style="width:100%;height:180px;min-height:180px;"></div>`;
+            container.appendChild(chartDiv);
+
+            // Measure actual rendered width AFTER appending to DOM
+            const chartEl = document.getElementById(chartId);
+            const chartW  = (chartEl && chartEl.offsetWidth > 0) ? chartEl.offsetWidth : 320;
+
+            Plotly.newPlot(chartId, [{
+                x:sorted.map(p=>p.name), y:cumulative, type:'scatter', mode:'lines+markers',
+                line:{color:lineColor,width:2,shape:'spline'}, marker:{size:4,color:'#333'},
+                fill:'tozeroy', fillcolor:fillColor,
+                hovertemplate:'<b>%{x}</b><br>Cumulative EBIT: %{y:.2f}L<extra></extra>'
+            }], {
+                autosize:false, width:chartW, height:180,
+                margin:{t:5,b:35,l:45,r:5},
+                xaxis:{title:{text:itemLabel,font:{size:9}},showticklabels:false,showgrid:false},
+                yaxis:{title:{text:'Cumulative EBIT (L)',font:{size:9}},showgrid:true,gridcolor:'#e5e7eb'},
+                plot_bgcolor:'#fafafa', paper_bgcolor:'white', showlegend:false
+            }, {displayModeBar:false});
+
+            // Per-BU dynamic summary
+            if(summaryContainer) {
+                const buSummaryText = generateBUSummaryText(bu, data, items, sorted, itemType, basePayload);
+                const block = document.createElement('div');
+                block.className = 'bu-summary-block';
+                block.dataset.buKey = safeId;
+                block.innerHTML = `<div class="bu-summary-block-title"><i class="fa-solid fa-circle-info"></i> ${bu} — ${matrixType==='product'?'Product':'Customer'} Analysis</div><p>${buSummaryText}</p>`;
+                summaryContainer.appendChild(block);
+            }
+        }
+    } catch(e) {
+        console.error('BU Whale Curves Error:', e);
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:#dc2626;">Error loading BU data</div>';
+    }
+    if(window.attachBUGridObserver) window.attachBUGridObserver(containerId);
+
+    // Relayout all BU charts with actual widths once DOM has settled
+    const _relayoutBU = () => {
+        container.querySelectorAll('[id^="buChart_"]').forEach(c => {
+            const w = c.offsetWidth;
+            if(w > 0) {
+                try { Plotly.relayout(c, {width: w, height: 180}); } catch(e){}
+            }
+        });
+    };
+    setTimeout(_relayoutBU, 150);
+    setTimeout(_relayoutBU, 500);
+    setTimeout(_relayoutBU, 1200);
+}
+
+// ─── CURVE CHART ──────────────────────────────────────────────────────────────
+function createCurveChart(id, data, xTitle) {
+    const elmt = el(id); if(!elmt) return;
+    if(!data?.labels?.length) { elmt.innerHTML="<div class='no-data'>No Data</div>"; return; }
+    elmt.innerHTML = '';
+    Plotly.newPlot(id, [{
+        x:data.labels, y:data.cumulative, customdata:data.values, type:'scatter', mode:'lines+markers',
+        line:{color:'#8B0000',width:3,shape:'spline'}, marker:{size:6,color:'#333'},
+        fill:'tozeroy', fillcolor:'rgba(139,0,0,0.05)', hovertemplate:whaleTmpl
+    }], {
+        margin:{t:20,b:100,l:60,r:20},
+        xaxis:{title:xTitle,tickangle:-45,automargin:true},
+        yaxis:{title:'Cumulative EBIT (Lakhs)',showticklabels:false},
+        autosize:true
+    }, {responsive:true,displayModeBar:false});
+    elmt.on('plotly_click', d => {
+        if(d.points?.length) {
+            const selectId = id==='customerChart' ? 'customerDrilldownSelect' : 'productDrilldownSelect';
+            const $sel = $(`#${selectId}`);
+            if($sel.val() === 'All') { $sel.val(d.points[0].x).trigger('change'); refreshAll(); }
+        }
+    });
+}
+
+// ─── PDF DOWNLOAD ─────────────────────────────────────────────────────────────
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        if(document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = src; s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+    });
+}
+
+async function downloadSummaryPDF() {
+    const btn = document.querySelector('button[onclick="downloadSummaryPDF()"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>&nbsp; Generating PDF...';
+    btn.disabled = true;
+
+    try {
+        if(!window.html2canvas) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+        if(!window.jspdf)      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p','mm','a4');
+        const pageW  = pdf.internal.pageSize.getWidth();
+        const pageH  = pdf.internal.pageSize.getHeight();
+        const margin = 12, contentW = pageW - margin*2;
+        const now = new Date();
+        let y = margin, pageNum = 1;
+
+        const addHeader = () => {
+            pdf.setFillColor(139,0,0); pdf.rect(0,0,pageW,20,'F');
+            pdf.setTextColor(255,255,255);
+            pdf.setFontSize(9); pdf.setFont(undefined,'normal'); pdf.text('Profit Analytics from:', margin, 8);
+            pdf.setFontSize(13); pdf.setFont(undefined,'bold'); pdf.text("Margin'sReveal", margin, 16);
+            pdf.setFontSize(8); pdf.setFont(undefined,'normal'); pdf.text('Qber PC Analysis', pageW-margin, 12, {align:'right'});
+            pdf.setTextColor(0,0,0);
+        };
+
+        const addFooter = pNum => {
+            pdf.setFontSize(7); pdf.setTextColor(140,140,140);
+            pdf.text(`Generated: ${now.toLocaleString()}`, margin, pageH-5);
+            pdf.text(`Page ${pNum}`, pageW-margin, pageH-5, {align:'right'});
+            pdf.setTextColor(0,0,0);
+        };
+
+        const checkPageBreak = needed => {
+            if(y+needed > pageH-15) { addFooter(pageNum); pdf.addPage(); pageNum++; addHeader(); y=25; return true; }
+            return false;
+        };
+
+        addHeader(); y = 25;
+
+        // Section 1: Reveal Scorecard
+        pdf.setFontSize(12); pdf.setFont(undefined,'bold');
+        pdf.text('Reveal Scorecard', pageW/2, y, {align:'center'}); y += 8;
+
+        const tableRows = id => Array.from(document.querySelectorAll(`#${id} tr`)).map(r => Array.from(r.querySelectorAll('td')).map(c => c.innerText.trim()));
+        const prodRows = tableRows('productScorecardBody');
+        const custRows = tableRows('customerScorecardBody');
+        const tableW   = (contentW-6)/2;
+        const tableStyle = { theme:'grid', styles:{fontSize:7,cellPadding:2}, headStyles:{fillColor:[139,0,0],textColor:255,fontStyle:'bold'} };
+
+        pdf.setFontSize(9); pdf.setFont(undefined,'bold');
+        pdf.text('Product wise',  margin+tableW/2,              y-1, {align:'center'});
+        pdf.text('Customer wise', margin+tableW+6+tableW/2,     y-1, {align:'center'});
+        pdf.autoTable({ startY:y, head:[['Particulars','Count','Profit','%']], body:prodRows, tableWidth:tableW, margin:{left:margin, right:pageW-margin-tableW}, ...tableStyle });
+        pdf.autoTable({ startY:y, head:[['Particulars','Count','Profit','%']], body:custRows, tableWidth:tableW, margin:{left:margin+tableW+6, right:margin}, ...tableStyle });
+        y = pdf.lastAutoTable.finalY + 12;
+
+        // Section 2: Whale Curves
+        checkPageBreak(90);
+        pdf.setFontSize(11); pdf.setFont(undefined,'bold');
+        pdf.text('Profit Whale Curves Analysis', pageW/2, y, {align:'center'}); y += 8;
+
+        const prodChartEl = el('productWhaleCurve');
+        const custChartEl = el('customerWhaleCurve');
+        if(prodChartEl && custChartEl) {
+            pdf.setFontSize(9); pdf.setFont(undefined,'bold');
+            pdf.text('Product Wise',  margin+contentW/4,               y-1, {align:'center'});
+            pdf.text('Customer Wise', margin+contentW/2+3+contentW/4,  y-1, {align:'center'});
+            const prodCanvas = await html2canvas(prodChartEl, {scale:2,useCORS:true,backgroundColor:'#ffffff'});
+            const chartW = contentW/2-3;
+            const chartH = (prodCanvas.height/prodCanvas.width)*chartW;
+            pdf.addImage(prodCanvas.toDataURL('image/png'), 'PNG', margin, y, chartW, chartH);
+            const custCanvas = await html2canvas(custChartEl, {scale:2,useCORS:true,backgroundColor:'#ffffff'});
+            pdf.addImage(custCanvas.toDataURL('image/png'), 'PNG', margin+contentW/2+3, y, chartW, chartH);
+            y += chartH + 6;
+        }
+
+        checkPageBreak(30);
+        const renderSummaryText = (elId, label) => {
+            const txt = el(elId)?.innerText.trim();
+            if(!txt) return;
+            pdf.setFontSize(8); pdf.setFont(undefined,'bold'); pdf.text(label, margin, y); y += 4;
+            pdf.setFont(undefined,'normal');
+            pdf.splitTextToSize(txt, contentW).forEach(line => { checkPageBreak(5); pdf.text(line, margin, y); y += 4; });
+            y += 4;
+        };
+        renderSummaryText('productWhaleSummary',  'Product Analysis:');
+        checkPageBreak(30);
+        renderSummaryText('customerWhaleSummary', 'Customer Analysis:');
+        y += 4;
+
+        // Section 3: BU Product Curves
+        checkPageBreak(50);
+        pdf.setFontSize(11); pdf.setFont(undefined,'bold');
+        pdf.text('BU-wise Product EBIT Whale Curves', pageW/2, y, {align:'center'}); y += 8;
+
+        const renderBUSection = async (containerId, noDataMsg) => {
+            const buContainer = el(containerId);
+            const buCharts = buContainer ? buContainer.querySelectorAll('[id^="buChart_product_"],[id^="buChart_customer_"]') : [];
+            if(buCharts.length > 0) {
+                let col = 0;
+                const buChartW = (contentW-6)/3;
+                let rowY = y;
+                for(let i = 0; i < buCharts.length; i++) {
+                    if(col === 3) { col=0; y+=48; rowY=y; checkPageBreak(55); }
+                    const xPos = margin + col*(buChartW+3);
+                    const buTitle = buCharts[i].parentElement.querySelector('h4')?.innerText || `BU ${i+1}`;
+                    pdf.setFontSize(7); pdf.setFont(undefined,'bold');
+                    pdf.text(buTitle, xPos+buChartW/2, rowY-1, {align:'center'});
+                    try {
+                        const canvas = await html2canvas(buCharts[i], {scale:1.5,useCORS:true,backgroundColor:'#ffffff'});
+                        const buH = (canvas.height/canvas.width)*buChartW;
+                        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', xPos, rowY, buChartW, Math.min(buH,42));
+                    } catch(err) { console.error('BU chart error:', err); }
+                    col++;
+                }
+                y = rowY + 48;
+            } else {
+                pdf.setFontSize(8); pdf.setFont(undefined,'normal');
+                pdf.text(noDataMsg, pageW/2, y, {align:'center'});
+            }
+        };
+
+        await renderBUSection('buWhaleCurvesContainer', 'No BU data available');
+        y += 8;
+
+        // Section 4: BU Customer Curves
+        checkPageBreak(50);
+        pdf.setFontSize(11); pdf.setFont(undefined,'bold');
+        pdf.text('BU-wise Customer EBIT Whale Curves', pageW/2, y, {align:'center'}); y += 8;
+        await renderBUSection('buCustomerWhaleCurvesContainer', 'No BU customer data available');
+
+        const totalPages = pdf.internal.getNumberOfPages();
+        for(let i=1; i<=totalPages; i++) { pdf.setPage(i); addFooter(i); }
+
+        pdf.save(`Qber_Summary_${now.toISOString().split('T')[0]}.pdf`);
+
+    } catch(err) {
+        console.error('PDF error:', err);
+        alert('Could not generate PDF. Make sure the summary data is loaded first.');
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+// ─── BU SUMMARY TEXT GENERATOR ───────────────────────────────────────────────
+function generateBUSummaryText(bu, data, allItems, sortedItems, itemType, payload) {
+    const profitMakers = sortedItems.filter(p => p.ebit > 0);
+    const lossMakers   = sortedItems.filter(p => p.ebit < 0);
+    const profitSum    = profitMakers.reduce((s, p) => s + p.ebit, 0);
+    const lossSum      = lossMakers.reduce((s, p)   => s + p.ebit, 0);
+    const totalEbit    = data.meta.total_ebit  || 0;
+    const totalSales   = data.meta.total_sales || 0;
+    const n            = allItems.length;
+
+    if(!n) return `No ${itemType} data available for ${bu}.`;
+
+    const profitPct = ((profitMakers.length / n) * 100).toFixed(0);
+    const lossPct   = ((lossMakers.length  / n) * 100).toFixed(0);
+
+    const top20n    = Math.ceil(n * 0.2);
+    const top20Ebit = sortedItems.slice(0, top20n).reduce((s, p) => s + p.ebit, 0);
+    const top20Sal  = sortedItems.slice(0, top20n).reduce((s, p) => s + (p.sales||0), 0);
+
+    const shape = lossMakers.length > n * 0.5
+        ? "a steeply declining curve indicating significant profitability drag"
+        : lossMakers.length > n * 0.3
+            ? "a moderately concentrated curve with a notable loss-making tail"
+            : "a healthy curve with most items contributing positively";
+
+    const fyText = payload.years?.[0] !== 'All' ? `FY ${payload.years[0]}` : 'the analyzed period';
+
+    let txt = `For <strong>${bu}</strong> in ${fyText}, the whale curve exhibits ${shape}. `;
+    txt += `Out of ${n} ${itemType}, <strong>${profitPct}%</strong> (${profitMakers.length}) are profit-generating contributing <strong>${formatK(profitSum)}</strong>, `;
+    txt += `while <strong>${lossPct}%</strong> (${lossMakers.length}) erode <strong>${formatK(Math.abs(lossSum))}</strong>, `;
+    txt += `resulting in a net EBIT of <strong>${formatK(totalEbit)}</strong>.`;
+
+    if(top20Sal > 0 && totalSales > 0) {
+        const salesPct    = ((top20Sal / totalSales) * 100).toFixed(0);
+        const profitTimes = totalEbit !== 0 ? (top20Ebit / totalEbit).toFixed(1) : '—';
+        txt += ` The top 20% of ${itemType} (${top20n} items) account for <strong>${salesPct}%</strong> of BU sales and generate approximately <strong>${profitTimes}×</strong> the realized EBIT for ${bu}.`;
+    }
+
+    return txt;
+}
+
+// ─── PER-VIEW PDF DOWNLOAD ────────────────────────────────────────────────────
+// Dynamically collects ALL chart-cards and summary blocks inside the active view.
+// Adding new sections to the HTML automatically includes them in the download.
+async function downloadViewPDF(viewType) {
+    const spinEl = el(`dlSpin${viewType==='product'?'Product':'Customer'}`);
+    const iconEl = el(`dlIcon${viewType==='product'?'Product':'Customer'}`);
+    const btn    = document.querySelector(`button[onclick="downloadViewPDF('${viewType}')"]`);
+    if(!btn || btn.disabled) return;
+    btn.disabled = true;
+    spinEl.style.display = 'inline-block';
+    iconEl.style.display = 'none';
+
+    try {
+        if(!window.html2canvas) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+        if(!window.jspdf)      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+
+        const { jsPDF } = window.jspdf;
+        const pdf      = new jsPDF('p','mm','a4');
+        const pageW    = pdf.internal.pageSize.getWidth();
+        const pageH    = pdf.internal.pageSize.getHeight();
+        const margin   = 12, contentW = pageW - margin * 2;
+        const now      = new Date();
+        let y = margin, pageNum = 1;
+
+        const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+        const viewLabel = cap(viewType);  // 'Product' or 'Customer'
+
+        const addHeader = () => {
+            pdf.setFillColor(139,0,0); pdf.rect(0,0,pageW,20,'F');
+            pdf.setTextColor(255,255,255);
+            pdf.setFontSize(9); pdf.setFont(undefined,'normal');
+            pdf.text('Qber Financial Analysis', margin, 8);
+            pdf.setFontSize(13); pdf.setFont(undefined,'bold');
+            pdf.text(`${viewLabel} Summary Report`, margin, 16);
+            pdf.setFontSize(8); pdf.setFont(undefined,'normal');
+            pdf.text(now.toLocaleDateString(), pageW-margin, 12, {align:'right'});
+            pdf.setTextColor(0,0,0);
+        };
+
+        const addFooter = pNum => {
+            pdf.setFontSize(7); pdf.setTextColor(140,140,140);
+            pdf.text(`Generated: ${now.toLocaleString()}`, margin, pageH-5);
+            pdf.text(`Page ${pNum}`, pageW-margin, pageH-5, {align:'right'});
+            pdf.setTextColor(0,0,0);
+        };
+
+        const checkPageBreak = needed => {
+            if(y + needed > pageH - 15) {
+                addFooter(pageNum); pdf.addPage(); pageNum++; addHeader(); y = 25; return true;
+            }
+            return false;
+        };
+
+        // Inline text helper
+        const addBodyText = (htmlStr) => {
+            const txt = htmlStr.replace(/<[^>]+>/g,'').trim();
+            if(!txt) return;
+            pdf.setFontSize(8.5); pdf.setFont(undefined,'normal');
+            pdf.splitTextToSize(txt, contentW).forEach(line => { checkPageBreak(5); pdf.text(line, margin, y); y += 4.5; });
+            y += 3;
+        };
+
+        const addSectionTitle = (text, size=11) => {
+            checkPageBreak(14);
+            pdf.setFontSize(size); pdf.setFont(undefined,'bold');
+            pdf.text(text, pageW/2, y, {align:'center'}); y += 8;
+        };
+
+        const captureEl = async (domEl, maxH) => {
+            if(!domEl || domEl.offsetParent === null) return;
+            try {
+                const canvas = await html2canvas(domEl, {scale:2, useCORS:true, backgroundColor:'#ffffff'});
+                const w = contentW;
+                let h = (canvas.height / canvas.width) * w;
+                if(maxH) h = Math.min(h, maxH);
+                checkPageBreak(h + 4);
+                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, y, w, h);
+                y += h + 6;
+            } catch(e) { console.error('Capture error:', e); }
+        };
+
+        addHeader(); y = 25;
+
+        // ── SECTION 0: Understanding the Whale Curve ─────────────────────────
+        addSectionTitle('Understanding the Whale Curve', 12);
+        const introEl = document.querySelector('.intro-box');
+        if(introEl) {
+            introEl.querySelectorAll('h3').forEach(h => {
+                checkPageBreak(10);
+                pdf.setFontSize(9); pdf.setFont(undefined,'bold');
+                pdf.text(h.innerText.trim(), margin, y); y += 5;
+            });
+            introEl.querySelectorAll('p').forEach(p => addBodyText(p.innerHTML));
+        }
+        y += 4;
+
+        // ── SECTION 1: Reveal Scorecard ──────────────────────────────────────
+        addSectionTitle(`${viewLabel} Reveal Scorecard`);
+        const scorecardId = viewType==='product' ? 'productScorecardBody' : 'customerScorecardBody';
+        const tableRows   = Array.from(document.querySelectorAll(`#${scorecardId} tr`)).map(r =>
+            Array.from(r.querySelectorAll('td')).map(c => c.innerText.trim()));
+        const tblStyle = { theme:'grid', styles:{fontSize:8,cellPadding:2.5}, headStyles:{fillColor:[139,0,0],textColor:255,fontStyle:'bold'} };
+        const tblW = contentW * 0.55;
+        pdf.autoTable({ startY:y, head:[['Particulars','Count','Profit','%']], body:tableRows,
+            tableWidth:tblW, margin:{left:margin + (contentW-tblW)/2, right:margin}, ...tblStyle });
+        y = pdf.lastAutoTable.finalY + 12;
+
+        // ── SECTION 2: Main Whale Curve Chart + Summary ──────────────────────
+        addSectionTitle(`${viewLabel} Wise Profit Whale Curve`);
+        const whaleChartEl = el(viewType==='product' ? 'productWhaleCurve' : 'customerWhaleCurve');
+        await captureEl(whaleChartEl, 80);
+        const whaleSummaryEl = el(viewType==='product' ? 'productWhaleSummary' : 'customerWhaleSummary');
+        if(whaleSummaryEl?.innerHTML?.trim()) {
+            checkPageBreak(20);
+            pdf.setFillColor(249,250,251); pdf.rect(margin, y-2, contentW, 4, 'F');
+            addBodyText(whaleSummaryEl.innerHTML);
+        }
+        y += 4;
+
+        // ── SECTION 3: BU Whale Curves + per-BU Summaries ───────────────────
+        const buContainerId = viewType==='product' ? 'buWhaleCurvesContainer' : 'buCustomerWhaleCurvesContainer';
+        const buSumContId   = viewType==='product' ? 'buProductSummariesContainer' : 'buCustomerSummariesContainer';
+        const buContainer   = el(buContainerId);
+        const buChartEls    = buContainer ? buContainer.querySelectorAll('.bu-chart-inner') : [];
+
+        if(buChartEls.length > 0) {
+            addSectionTitle(`BU-wise ${viewLabel} EBIT Whale Curves`);
+            const buChartW = (contentW - 6) / 3;
+            let col=0, rowY=y;
+
+            for(let i=0; i<buChartEls.length; i++) {
+                if(col === 3) { col=0; y += 48; rowY=y; checkPageBreak(55); }
+                const xPos    = margin + col * (buChartW + 3);
+                const titleEl = buChartEls[i].parentElement.querySelector('h4');
+                const buTitle = titleEl?.innerText || `BU ${i+1}`;
+                pdf.setFontSize(7); pdf.setFont(undefined,'bold');
+                pdf.text(buTitle, xPos+buChartW/2, rowY-1, {align:'center'});
+                try {
+                    const canvas = await html2canvas(buChartEls[i], {scale:1.5,useCORS:true,backgroundColor:'#ffffff'});
+                    const buH = (canvas.height/canvas.width)*buChartW;
+                    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', xPos, rowY, buChartW, Math.min(buH,42));
+                } catch(e) { console.error('BU chart error:', e); }
+                col++;
+            }
+            y = rowY + 52;
+
+            // Per-BU summaries
+            const buSumContainer = el(buSumContId);
+            if(buSumContainer) {
+                const summaryBlocks = buSumContainer.querySelectorAll('.bu-summary-block');
+                if(summaryBlocks.length > 0) {
+                    checkPageBreak(16);
+                    pdf.setFontSize(10); pdf.setFont(undefined,'bold');
+                    pdf.text('BU-wise Analysis Summaries', pageW/2, y, {align:'center'}); y += 7;
+
+                    summaryBlocks.forEach(block => {
+                        const titleTxt = block.querySelector('.bu-summary-block-title')?.innerText.trim() || '';
+                        const bodyTxt  = block.querySelector('p')?.innerHTML || '';
+                        checkPageBreak(12);
+                        pdf.setFontSize(8.5); pdf.setFont(undefined,'bold');
+                        pdf.text(titleTxt.replace(/\s+/g,' '), margin, y); y += 5;
+                        addBodyText(bodyTxt);
+                        y += 2;
+                    });
+                }
+            }
+        }
+
+        // ── FUTURE SECTIONS: auto-capture any new .chart-card inside this view ─
+        // Any new chart-card added to view-product / view-customer will be auto-included.
+        const viewEl = el(`view-${viewType}`);
+        const allCards = viewEl ? Array.from(viewEl.querySelectorAll('.chart-card')) : [];
+        // Skip the cards we've already handled (scorecard, main whale, BU card)
+        const knownIds = new Set([
+            viewType==='product' ? 'productScorecardBody' : 'customerScorecardBody',
+            viewType==='product' ? 'productWhaleCurve'    : 'customerWhaleCurve',
+            viewType==='product' ? 'buWhaleCurvesContainer' : 'buCustomerWhaleCurvesContainer'
+        ]);
+        const extraCards = allCards.filter(card => {
+            const ids = card.querySelectorAll('[id]');
+            return ![...ids].some(el => knownIds.has(el.id));
+        });
+
+        for(const card of extraCards) {
+            const titleEl = card.querySelector('h3');
+            const title   = titleEl?.innerText?.trim();
+            if(title) {
+                addSectionTitle(title, 10);
+                titleEl.style.display = 'none';
+                await captureEl(card, 120);
+                titleEl.style.display = '';
+            } else {
+                await captureEl(card, 120);
+            }
+        }
+
+        const totalPages = pdf.internal.getNumberOfPages();
+        for(let i=1; i<=totalPages; i++) { pdf.setPage(i); addFooter(i); }
+        pdf.save(`Qber_${viewLabel}_Summary_${now.toISOString().split('T')[0]}.pdf`);
+
+    } catch(err) {
+        console.error('PDF error:', err);
+        alert('Could not generate PDF. Ensure the summary data is loaded first.');
+    } finally {
+        btn.disabled  = false;
+        spinEl.style.display = 'none';
+        iconEl.style.display = 'inline-block';
+    }
+}
+
+// ─── UPLOAD FUNCTIONALITY ─────────────────────────────────────────────────────
+let uploadSelectedFile = null;
+
+function uploadDragOver(e) {
+    e.preventDefault();
+    el('uploadDropZone').classList.add('dragover');
+}
+function uploadDragLeave(e) {
+    el('uploadDropZone').classList.remove('dragover');
+}
+function uploadDrop(e) {
+    e.preventDefault();
+    el('uploadDropZone').classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if(file) uploadSetFile(file);
+}
+function uploadFileSelected(input) {
+    if(input.files[0]) uploadSetFile(input.files[0]);
+}
+
+function uploadSetFile(file) {
+    const allowed = ['.xlsx','.xls','.csv'];
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if(!allowed.includes(ext)) {
+        uploadAddLog('error', `Unsupported file type "${ext}". Please use .xlsx, .xls, or .csv.`);
+        return;
+    }
+    uploadSelectedFile = file;
+    const sizeKB = file.size < 1024*1024 ? (file.size/1024).toFixed(1)+' KB' : (file.size/1024/1024).toFixed(2)+' MB';
+    el('uploadFileName').textContent = file.name;
+    el('uploadFileSize').textContent = sizeKB;
+    el('uploadFileIcon').className   = ext==='.csv' ? 'fa-solid fa-file-csv upload-file-icon' : 'fa-solid fa-file-excel upload-file-icon';
+    el('uploadFileIcon').style.color = ext==='.csv' ? '#1a6b3a' : '#217346';
+    el('uploadFilePreview').style.display = 'block';
+    el('uploadActionRow').style.display   = 'block';
+    el('uploadStatus').textContent = '';
+    el('uploadStatus').className   = 'upload-status';
+    el('uploadProgressWrap').style.display = 'none';
+    el('uploadProgressBar').style.width    = '0%';
+}
+
+function uploadClearFile() {
+    uploadSelectedFile = null;
+    el('uploadFilePreview').style.display = 'none';
+    el('uploadActionRow').style.display   = 'none';
+    el('fileInput').value = '';
+}
+
+async function uploadSubmit() {
+    if(!uploadSelectedFile) return;
+    const btn = el('uploadSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading…';
+
+    el('uploadProgressWrap').style.display = 'block';
+    el('uploadProgressBar').style.width = '10%';
+    el('uploadStatus').textContent = 'Uploading file…';
+    el('uploadStatus').className = 'upload-status info';
+
+    const formData = new FormData();
+    formData.append('file', uploadSelectedFile);
+
+    try {
+        el('uploadProgressBar').style.width = '40%';
+        const res  = await fetch('/api/upload_data', { method:'POST', body:formData });
+        el('uploadProgressBar').style.width = '80%';
+        const data = await res.json();
+
+        if(data.success || res.ok) {
+            el('uploadProgressBar').style.width = '100%';
+            el('uploadStatus').textContent = '✓ File uploaded and processed successfully!';
+            el('uploadStatus').className = 'upload-status success';
+            uploadAddLog('success', `"${uploadSelectedFile.name}" uploaded successfully.`);
+            setTimeout(() => {
+                uploadClearFile();
+                refreshAll();
+            }, 1800);
+        } else {
+            throw new Error(data.error || data.message || 'Upload failed');
+        }
+    } catch(e) {
+        el('uploadProgressBar').style.width = '100%';
+        el('uploadProgressBar').style.background = '#dc3545';
+        el('uploadStatus').textContent = '✗ ' + e.message;
+        el('uploadStatus').className = 'upload-status error';
+        uploadAddLog('error', `Failed to upload "${uploadSelectedFile.name}": ${e.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-upload"></i> Upload &amp; Process';
+    }
+}
+
+function uploadAddLog(type, msg) {
+    const logCard = el('uploadLogCard');
+    const logList = el('uploadLogList');
+    logCard.style.display = 'block';
+    const now  = new Date().toLocaleTimeString();
+    const icon = type==='success' ? 'fa-circle-check' : type==='error' ? 'fa-circle-xmark' : 'fa-circle-info';
+    const li   = document.createElement('li');
+    li.className = `upload-log-item ${type}`;
+    li.innerHTML = `<i class="fa-solid ${icon}"></i><span>${msg}</span><span class="upload-log-time">${now}</span>`;
+    logList.insertBefore(li, logList.firstChild);
+}
+
+// Ask QBER JS lives in ask_qber.html (served at /ask-qber)
+
+// ─── STOCK AGEING BREAKDOWN POPUP (Plant / BU stacked bars) ──────────────────
+async function openStockAgeingPopup(month, payload) {
+    const popup = document.getElementById('stockAgeingPopup');
+    document.getElementById('stockAgeingPopupTitle').innerText = `Stock Ageing — ${month} (Rs in Lacs)`;
+    document.getElementById('stockAgeingChartPlant').innerHTML =
+        '<div style="text-align:center;padding:40px;color:#888;"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
+    document.getElementById('stockAgeingChartBU').innerHTML = '';
+    document.getElementById('stockAgeingTabPlant').classList.add('inv-tab-active');
+    document.getElementById('stockAgeingTabBU').classList.remove('inv-tab-active');
+    document.getElementById('stockAgeingPanelPlant').style.display = 'block';
+    document.getElementById('stockAgeingPanelBU').style.display    = 'none';
+    window._stockAgeingBUData = null;
+    popup.style.display = 'flex';
+
+    try {
+        const [plantData, buData] = await Promise.all([
+            postJSON('/api/stock_ageing_breakdown', { ...payload, month_name: month, group_by: 'plant' }),
+            postJSON('/api/stock_ageing_breakdown', { ...payload, month_name: month, group_by: 'bu' })
+        ]);
+        window._stockAgeingBUData = buData;
+        renderStockAgeingBreakdown('stockAgeingChartPlant', plantData, 'Plant');
+        window._stockAgeingBUDataReady = buData;
+    } catch(e) {
+        document.getElementById('stockAgeingChartPlant').innerHTML =
+            '<div style="text-align:center;padding:40px;color:#c00;">Error: ' + e.message + '</div>';
+        console.error(e);
+    }
+}
+
+function switchStockAgeingTab(tab) {
+    const isPlant = tab === 'plant';
+    document.getElementById('stockAgeingTabPlant').classList.toggle('inv-tab-active', isPlant);
+    document.getElementById('stockAgeingTabBU').classList.toggle('inv-tab-active', !isPlant);
+    document.getElementById('stockAgeingPanelPlant').style.display = isPlant ? 'block' : 'none';
+    document.getElementById('stockAgeingPanelBU').style.display    = isPlant ? 'none'  : 'block';
+    if (!isPlant && window._stockAgeingBUDataReady) {
+        if (document.getElementById('stockAgeingChartBU').innerHTML.trim() === '') {
+            renderStockAgeingBreakdown('stockAgeingChartBU', window._stockAgeingBUDataReady, 'BU');
+        }
+    }
+}
+
+function renderStockAgeingBreakdown(containerId, data, xTitle) {
+    const el = document.getElementById(containerId);
+    if (!data || data.error || data.empty || !data.labels || !data.labels.length) {
+        el.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">No data available</div>';
+        return;
+    }
+    el.style.height = '360px';
+
+    const AGEING_COLORS = { below_30:'#16a34a', '30_to_60':'#facc15', '60_to_90':'#f97316', above_90:'#dc2626' };
+    const LABELS = { below_30:'Below 30 days', '30_to_60':'30 – 60 days', '60_to_90':'60 – 90 days', above_90:'Above 90 days' };
+    const buckets = ['below_30', '30_to_60', '60_to_90', 'above_90'];
+
+    const traces = buckets.map(b => ({
+        x: data.labels,
+        y: data[b],
+        name: LABELS[b],
+        type: 'bar',
+        marker: { color: AGEING_COLORS[b], line: { color: '#fff', width: 0.6 } },
+        hovertemplate: '<b>' + LABELS[b] + '</b><br>%{x}: ₹%{y:.2f} L<extra></extra>'
+    }));
+
+    const layout = {
+        barmode: 'stack',
+        margin: { t: 20, b: 80, l: 65, r: 20 },
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.1, font: { size: 12 } },
+        xaxis: { title: xTitle, tickangle: -30, automargin: true },
+        yaxis: { title: 'Rs in Lacs', showgrid: true, gridcolor: '#f0f0f0', zeroline: true },
+        plot_bgcolor: '#fff', paper_bgcolor: '#fff'
+    };
+    Plotly.newPlot(containerId, traces, layout, { responsive: true, displayModeBar: false });
+}
+
+function closeStockAgeingPopup() {
+    document.getElementById('stockAgeingPopup').style.display = 'none';
+    window._stockAgeingBUDataReady = null;
+}
+
+// ─── STOCK MONTH MATRIX POPUP (Plant × BU table) ─────────────────────────────
+async function openStockMonthMatrixPopup(month, payload, metric, metricLabel) {
+    // metric: 'amount' | 'non_moving' | 'slow_moving'  (defaults to 'amount')
+    metric      = metric      || 'amount';
+    metricLabel = metricLabel || 'Closing Stock';
+
+    const metricColors = {
+        'amount':     '#8B0000',
+        'non_moving': '#D97706',
+        'slow_moving':'#2563EB'
+    };
+    const headerColor = metricColors[metric] || '#8B0000';
+
+    const popup = document.getElementById('stockMonthMatrixPopup');
+    document.getElementById('stockMatrixPopupTitle').innerText = `${metricLabel} — ${month} (Plant × BU breakdown, Rs in Lacs)`;
+    document.getElementById('stockMatrixPopupBody').innerHTML =
+        '<div style="text-align:center;padding:40px;color:#888;"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
+    // Update header + close button color to match the metric line
+    const hdr = document.getElementById('stockMatrixPopupHeader');
+    const cls = document.getElementById('stockMatrixCloseBtn');
+    if (hdr) hdr.style.background = headerColor;
+    if (cls) cls.style.background  = headerColor;
+
+    popup.style.display = 'flex';
+
+    try {
+        const data = await postJSON('/api/stock_month_matrix', { ...payload, month_name: month, metric: metric });
+        const body = document.getElementById('stockMatrixPopupBody');
+
+        if (data.error || data.empty || !data.plants || !data.bus) {
+            body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">No data available for ' + month + '</div>';
+            return;
+        }
+
+        const plants = data.plants;
+        const bus    = data.bus;
+        const matrix = data.matrix;
+        const totals = data.totals;
+
+        // ── Build table ──
+        let html = `
+            <p style="font-size:.75rem;color:#888;margin:0 0 10px;">
+                <strong>${metricLabel} (Rs in Lacs)</strong> for each Plant–BU combination in <strong>${month}</strong>.
+            </p>
+            <div style="overflow:auto;max-height:55vh;">
+            <table style="border-collapse:collapse;width:100%;font-size:.78rem;table-layout:auto;">
+                <thead>
+                    <tr>
+                        <th style="background:#8B0000;color:#fff;padding:8px 10px;text-align:left;position:sticky;top:0;left:0;z-index:3;white-space:nowrap;border-right:2px solid #6b0000;">
+                            BU \\ Plant
+                        </th>`;
+
+        plants.forEach(plant => {
+            html += `<th style="background:#8B0000;color:#fff;padding:8px 6px;text-align:right;position:sticky;top:0;z-index:2;white-space:nowrap;border-right:1px solid #6b0000;">
+                        ${plant}
+                     </th>`;
+        });
+        html += `<th style="background:#6b0000;color:#fff;padding:8px 6px;text-align:right;position:sticky;top:0;z-index:2;white-space:nowrap;">Total</th>`;
+        html += `</tr></thead><tbody>`;
+
+        // Row totals per BU
+        bus.forEach((bu, ri) => {
+            const rowBg = ri % 2 === 0 ? '#fff' : '#fdf2f2';
+            let rowTotal = 0;
+            html += `<tr style="background:${rowBg};">
+                        <td style="padding:7px 10px;font-weight:700;color:#8B0000;position:sticky;left:0;background:${rowBg};z-index:1;border-right:2px solid #e5e7eb;border-bottom:1px solid #f0f0f0;white-space:nowrap;">${bu}</td>`;
+            plants.forEach(plant => {
+                const val = (matrix[bu] && matrix[bu][plant]) ? parseFloat(matrix[bu][plant]) : 0;
+                rowTotal += val;
+                const cellColor = val > 0 ? '#1a3c5e' : '#aaa';
+                html += `<td style="padding:7px 6px;text-align:right;color:${cellColor};border-right:1px solid #f0f0f0;border-bottom:1px solid #f0f0f0;">
+                            ${val > 0 ? val.toFixed(2) : '—'}
+                         </td>`;
+            });
+            html += `<td style="padding:7px 6px;text-align:right;font-weight:700;color:#8B0000;border-bottom:1px solid #f0f0f0;background:${ri%2===0?'#fff8f8':'#fde8e8'};">
+                        ${rowTotal.toFixed(2)}
+                     </td></tr>`;
+        });
+
+        // Grand totals row
+        let grandTotal = 0;
+        html += `<tr style="background:#8B0000;">
+                    <td style="padding:8px 10px;font-weight:700;color:#fff;position:sticky;left:0;background:#8B0000;z-index:1;border-right:2px solid #6b0000;white-space:nowrap;">Total</td>`;
+        plants.forEach(plant => {
+            const col = totals[plant] ? parseFloat(totals[plant]) : 0;
+            grandTotal += col;
+            html += `<td style="padding:8px 6px;text-align:right;font-weight:700;color:#fff;border-right:1px solid #6b0000;">${col.toFixed(2)}</td>`;
+        });
+        html += `<td style="padding:8px 6px;text-align:right;font-weight:800;color:#fff;">${grandTotal.toFixed(2)}</td></tr>`;
+
+        html += `</tbody></table></div>`;
+        body.innerHTML = html;
+
+    } catch(e) {
+        document.getElementById('stockMatrixPopupBody').innerHTML =
+            '<div style="text-align:center;padding:40px;color:#c00;">Error loading data: ' + e.message + '</div>';
+        console.error(e);
+    }
+}
+
+function closeStockMonthMatrixPopup() {
+    document.getElementById('stockMonthMatrixPopup').style.display = 'none';
+}
+
+(function initGlobalResize() {
+    let resizeTimer;
+    const debouncedResize = () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => resizePlotly(), 120); };
+
+    window.addEventListener('resize', debouncedResize);
+
+    const mainContent = document.querySelector('.main-content');
+    if(mainContent && window.ResizeObserver) new ResizeObserver(debouncedResize).observe(mainContent);
+
+    const gridObserver = window.ResizeObserver ? new ResizeObserver(entries => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            entries.forEach(entry => { entry.target.querySelectorAll('.js-plotly-plot').forEach(p => { try { Plotly.Plots.resize(p); } catch(e){} }); });
+        }, 100);
+    }) : null;
+
+    window.attachBUGridObserver = function(containerId) {
+        const c = el(containerId);
+        if(c && gridObserver) gridObserver.observe(c);
+    };
+})();
+</script>
+</body>
+</html>

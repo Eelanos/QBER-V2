@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Qber | Ask QBER</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ── Shared layout tokens ── */
+:root {
+    --primary-red: #8B0000;
+    --hover-red:   #a52a2a;
+}
+
+/* ── Reuse relevant card / scorecard styles from index ── */
+.chart-card{background:#fff;padding:15px;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1);border-top:3px solid #666;height:auto;display:flex;flex-direction:column;}
+.no-minheight{min-height:unset;}
+.tc{text-align:center;} .tu{text-decoration:underline;}
+.scorecard-table{width:50%;margin:20px auto;border-collapse:collapse;border:1px solid #999;}
+.scorecard-thead-row{background:#f0f0f0;}
+.sc-th{border:1px solid #999;padding:5px 8px;font-weight:600;}
+.sc-td{border:1px solid #000;padding:8px;}
+.sc-td-r{border:1px solid #000;padding:8px;text-align:right;}
+.sc-td-c{border:1px solid #000;padding:8px;text-align:center;}
+.whale-chart-div{width:100%;height:420px;flex-shrink:0;}
+.whale-summary{padding:15px;background:#f9fafb;border-left:4px solid var(--primary-red);margin-top:15px;flex-shrink:0;}
+.bu-chart-card{border:1px solid #ddd;border-radius:6px;padding:10px;background:#fff;box-sizing:border-box;min-width:0;overflow:visible;}
+.bu-chart-title{text-align:center;color:#8B0000;font-size:.9rem;margin:0 0 6px;font-weight:700;}
+.bu-wrapper-card{min-height:unset !important;height:auto !important;}
+.bu-grid-container{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;width:100%;box-sizing:border-box;}
+.bu-chart-inner{width:100%;aspect-ratio:16/9;min-height:160px;max-height:240px;box-sizing:border-box;height:180px;}
+.bu-summaries-container{margin-top:18px;display:flex;flex-direction:column;gap:12px;}
+.bu-summary-block{background:#f9fafb;border-left:4px solid #8B0000;border-radius:0 6px 6px 0;padding:12px 16px;}
+.bu-summary-block-title{font-size:.8rem;font-weight:800;color:#8B0000;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.bu-summary-block p{margin:0;font-size:.88rem;line-height:1.7;color:#374151;text-align:justify;}
+.download-bar{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#8B0000 0%,#a52a2a 100%);border-radius:8px;padding:18px 24px;margin-top:20px;margin-bottom:10px;box-shadow:0 4px 14px rgba(139,0,0,.25);}
+.download-bar-label{color:#fff;font-size:.95rem;font-weight:600;letter-spacing:.3px;}
+.download-btn{background:#fff;color:#8B0000;border:none;padding:10px 22px;border-radius:6px;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .2s;box-shadow:0 2px 6px rgba(0,0,0,.15);}
+.download-btn:hover{background:#f8e8e8;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.2);}
+.download-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+
+/* ── Page shell — full bleed, no max-width cap ── */
+/* Override global style.css — inside iframe, body must scroll */
+html { height: 100%; overflow-y: auto !important; }
+body {
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background: #f4f5f7;
+    height: auto !important;
+    min-height: 100%;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    display: block !important;
+}
+.ask-page-wrapper {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 24px 28px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-height: 100%;
+}
+
+/* ── Combined Ask QBER card — stretches full width of content area ── */
+.ask-qber-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 14px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.10);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Robot icon */
+.ask-qber-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.7rem;
+    color: var(--primary-red);
+    width: 44px;
+}
+
+/* Title + subtitle block */
+.ask-qber-title-block {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex-shrink: 0;
+    width: clamp(80px, 10vw, 130px);
+}
+.ask-qber-title-block .main-title {
+    font-size: clamp(.88rem, 1.1vw, 1.05rem);
+    font-weight: 800;
+    color: #1a1a1a;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.ask-qber-title-block .sub-title {
+    font-size: clamp(.65rem, .8vw, .75rem);
+    color: #888;
+    font-style: italic;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* Input — eats all remaining space */
+.ask-qber-input {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 40px;
+    padding: 0 14px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 6px;
+    font-size: .9rem;
+    font-family: 'Segoe UI', sans-serif;
+    color: #333;
+    outline: none;
+    transition: border-color .2s;
+    background: #fff;
+    width: 100%;
+    box-sizing: border-box;
+}
+.ask-qber-input:focus { border-color: #8B0000; }
+.ask-qber-input::placeholder { color: #bbb; }
+
+/* Ask button */
+.ask-send-btn {
+    height: 40px;
+    padding: 0 clamp(14px, 2vw, 24px);
+    background: #8B0000;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: clamp(.8rem, .95vw, .92rem);
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .2s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.ask-send-btn:hover { background: #a52a2a; }
+.ask-send-btn i { font-size: .82rem; }
+
+#qberStatusChip { display: none; font-size: .82rem; padding: 6px 14px; border-radius: 20px; font-weight: 600; flex-shrink: 0; }
+
+/* ── Responsive: small screens stack gracefully ── */
+@media (max-width: 600px) {
+    .ask-page-wrapper { padding: 14px 12px 40px; }
+    .ask-qber-card { flex-wrap: wrap; gap: 10px; }
+    .ask-qber-title-block { width: auto; }
+    .ask-qber-input { min-width: 100%; order: 3; }
+    .ask-send-btn { width: 100%; justify-content: center; order: 4; }
+}
+</style>
+</head>
+<body>
+
+<div class="ask-page-wrapper">
+
+    <!-- Ask QBER combined card — matches screenshot layout -->
+    <div class="ask-qber-card">
+        <div class="ask-qber-icon">
+            <i class="fa-solid fa-robot"></i>
+        </div>
+        <div class="ask-qber-title-block">
+            <span class="main-title">Ask QBER</span>
+            <span class="sub-title">Qber Gen AI</span>
+        </div>
+        <input class="ask-qber-input" type="text" id="qberInput"
+               placeholder="Ask anything about your data — e.g. Top 10 products by EBIT in FY25"
+               onkeydown="if(event.key==='Enter') handleQberQuery()">
+        <button class="ask-send-btn" onclick="handleQberQuery()">
+            <i class="fa-solid fa-paper-plane"></i> Ask
+        </button>
+        <div id="qberStatusChip"></div>
+    </div>
+
+    <!-- Conversation area -->
+    <div id="qberConversationArea" style="display:none;">
+        <div id="qberChatHistory" style="display:flex;flex-direction:column;gap:16px;"></div>
+    </div>
+
+    <!-- Product Summary view (shown on demand) -->
+    <div id="qberProductView" style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #eee;">
+            <i class="fa-solid fa-boxes-stacked" style="color:var(--primary-red);font-size:1.2rem;"></i>
+            <span style="font-size:1rem;font-weight:800;color:#333;text-transform:uppercase;letter-spacing:.5px;">Product Summary</span>
+            <button onclick="resetQberView()" style="margin-left:auto;background:none;border:1px solid #ccc;border-radius:4px;padding:4px 12px;font-size:.78rem;cursor:pointer;color:#555;">
+                <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+        </div>
+        <div class="chart-card" style="margin-bottom:20px;">
+            <h3 class="tc tu">Product Reveal Scorecard</h3>
+            <table class="scorecard-table">
+                <thead><tr class="scorecard-thead-row"><th class="sc-th">Particulars</th><th class="sc-th">Count</th><th class="sc-th">Profit</th><th class="sc-th">%</th></tr></thead>
+                <tbody id="qberProductScorecardBody"></tbody>
+            </table>
+        </div>
+        <div class="chart-card no-minheight" style="margin-bottom:20px;">
+            <h3 class="tc" style="margin-bottom:10px;">Product Wise Profit Whale Curve</h3>
+            <div id="qberProductWhaleCurve" class="whale-chart-div"></div>
+            <div id="qberProductWhaleSummary" class="whale-summary"></div>
+        </div>
+        <div class="chart-card bu-wrapper-card" style="margin-bottom:20px;">
+            <h3 class="tc">BU-wise Product EBIT Whale Curves</h3>
+            <div id="qberBuWhaleCurvesContainer" class="bu-grid-container"></div>
+            <div id="qberBuProductSummariesContainer" class="bu-summaries-container"></div>
+        </div>
+        <div class="download-bar">
+            <span class="download-bar-label"><i class="fa-solid fa-file-arrow-down"></i> Download this report</span>
+            <button class="download-btn" onclick="downloadViewPDF('product')">
+                <i class="fa-solid fa-download"></i>&nbsp;Download Product Summary PDF
+            </button>
+        </div>
+    </div>
+
+    <!-- Customer Summary view (shown on demand) -->
+    <div id="qberCustomerView" style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #eee;">
+            <i class="fa-solid fa-users" style="color:var(--primary-red);font-size:1.2rem;"></i>
+            <span style="font-size:1rem;font-weight:800;color:#333;text-transform:uppercase;letter-spacing:.5px;">Customer Summary</span>
+            <button onclick="resetQberView()" style="margin-left:auto;background:none;border:1px solid #ccc;border-radius:4px;padding:4px 12px;font-size:.78rem;cursor:pointer;color:#555;">
+                <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+        </div>
+        <div class="chart-card" style="margin-bottom:20px;">
+            <h3 class="tc tu">Customer Reveal Scorecard</h3>
+            <table class="scorecard-table">
+                <thead><tr class="scorecard-thead-row"><th class="sc-th">Particulars</th><th class="sc-th">Count</th><th class="sc-th">Profit</th><th class="sc-th">%</th></tr></thead>
+                <tbody id="qberCustomerScorecardBody"></tbody>
+            </table>
+        </div>
+        <div class="chart-card no-minheight" style="margin-bottom:20px;">
+            <h3 class="tc" style="margin-bottom:10px;">Customer Wise Profit Whale Curve</h3>
+            <div id="qberCustomerWhaleCurve" class="whale-chart-div"></div>
+            <div id="qberCustomerWhaleSummary" class="whale-summary"></div>
+        </div>
+        <div class="chart-card bu-wrapper-card" style="margin-bottom:20px;">
+            <h3 class="tc">BU-wise Customer EBIT Whale Curves</h3>
+            <div id="qberBuCustomerWhaleCurvesContainer" class="bu-grid-container"></div>
+            <div id="qberBuCustomerSummariesContainer" class="bu-summaries-container"></div>
+        </div>
+        <div class="download-bar">
+            <span class="download-bar-label"><i class="fa-solid fa-file-arrow-down"></i> Download this report</span>
+            <button class="download-btn" onclick="downloadViewPDF('customer')">
+                <i class="fa-solid fa-download"></i>&nbsp;Download Customer Summary PDF
+            </button>
+        </div>
+    </div>
+
+</div><!-- /.ask-page-wrapper -->
+
+<script>
+// ─── HELPERS (standalone — no index.html dependency) ──────────────────────────
+const el = id => document.getElementById(id);
+const postJSON = (url, body) => fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).then(r => r.json());
+
+function formatK(num) {
+    const a = Math.abs(num);
+    if(a >= 10000000) return (num/10000000).toFixed(2)+'Cr';
+    if(a >= 100000)   return (num/100000).toFixed(2)+'L';
+    if(a >= 1000)     return (num/1000).toFixed(1)+'k';
+    return num.toFixed(0);
+}
+
+function resizePlotly(scope) {
+    (scope || document).querySelectorAll('.js-plotly-plot').forEach(c => { try { Plotly.Plots.resize(c); } catch(e){} });
+}
+
+// ─── FILTERS: pulled from portal state via API ─────────────────────────────────
+// Ask QBER page uses "All" for all filters (no filter bar on this page).
+// To pass different filters, extend getBasePayload() below.
+function getBasePayload() {
+    return { plant:'All', bu:'All', product_group:'All', segment:'All', years:['All'], quarters:[], months:[] };
+}
+
+// ─── CHART PALETTE ────────────────────────────────────────────────────────────
+const QBER_PALETTE = [
+    { bg:'rgba(99,102,241,0.85)',  border:'#6366F1' },
+    { bg:'rgba(16,185,129,0.85)',  border:'#10B981' },
+    { bg:'rgba(245,158,11,0.85)',  border:'#F59E0B' },
+    { bg:'rgba(59,130,246,0.85)',  border:'#3B82F6' },
+    { bg:'rgba(168,85,247,0.85)',  border:'#A855F7' },
+    { bg:'rgba(236,72,153,0.85)',  border:'#EC4899' },
+    { bg:'rgba(20,184,166,0.85)',  border:'#14B8A6' },
+    { bg:'rgba(239,68,68,0.85)',   border:'#EF4444' },
+];
+
+const whaleTmpl = '<b>%{text}</b><br> EBIT: %{customdata:,.2f} Lakhs<extra></extra>';
+
+// ─── CONVERSATION STATE ───────────────────────────────────────────────────────
+let qberConversationHistory = [];
+
+function resetQberView() {
+    el('qberProductView').style.display      = 'none';
+    el('qberCustomerView').style.display     = 'none';
+    el('qberConversationArea').style.display = 'none';
+    el('qberChatHistory').innerHTML          = '';
+    el('qberStatusChip').style.display       = 'none';
+    el('qberInput').value                    = '';
+    qberConversationHistory = [];
+    el('qberInput').focus();
+}
+
+function showQberChip(text, color) {
+    const chip = el('qberStatusChip');
+    chip.textContent = text;
+    chip.style.cssText = `display:inline-block;font-size:.82rem;padding:6px 14px;border-radius:20px;font-weight:600;flex-shrink:0;background:${color}20;color:${color};border:1px solid ${color}40;`;
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function scrollToLatest(exchangeId) {
+    // Newest is at top — scroll the iframe back to the very top
+    setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 120);
+}
+
+function buildQberErrorBubble(msg) {
+    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 16px;
+                background:#fce8e6;border-radius:8px;border-left:3px solid #c5221f;max-width:85%;">
+                <i class="fa-solid fa-circle-exclamation" style="color:#c5221f;margin-top:2px;flex-shrink:0;"></i>
+                <span style="font-size:.88rem;color:#c5221f;line-height:1.6;">${msg}</span>
+            </div>`;
+}
+
+// ─── MAIN QUERY HANDLER ───────────────────────────────────────────────────────
+async function handleQberQuery() {
+    const inputEl   = el('qberInput');
+    const query     = (inputEl.value || '').trim();
+    if (!query) return;
+
+    const queryLower = query.toLowerCase();
+
+    // Hardcoded summary views
+    if (queryLower.includes('summarise productwise analysis')) {
+        showQberChip('✓ Product Summary', '#137333');
+        el('qberProductView').style.display      = 'block';
+        el('qberCustomerView').style.display     = 'none';
+        el('qberConversationArea').style.display = 'none';
+        loadQberSummaryData('product');
+        inputEl.value = '';
+        return;
+    }
+    if (queryLower.includes('customerwise analysis')) {
+        showQberChip('✓ Customer Summary', '#137333');
+        el('qberCustomerView').style.display     = 'block';
+        el('qberProductView').style.display      = 'none';
+        el('qberConversationArea').style.display = 'none';
+        loadQberSummaryData('customer');
+        inputEl.value = '';
+        return;
+    }
+
+    // AI Chat flow
+    el('qberProductView').style.display      = 'none';
+    el('qberCustomerView').style.display     = 'none';
+    el('qberConversationArea').style.display = 'block';
+
+    const exchangeId = 'qberExchange_' + Date.now();
+    const loadingId  = 'qberLoading_'  + Date.now();
+
+    el('qberChatHistory').insertAdjacentHTML('afterbegin', `
+        <div id="${exchangeId}" style="display:flex;flex-direction:column;gap:10px;padding-bottom:20px;margin-bottom:8px;border-bottom:1px solid #f0f0f0;">
+            <!-- User bubble -->
+            <div style="display:flex;justify-content:flex-end;">
+                <div style="max-width:82%;display:flex;align-items:flex-start;gap:8px;flex-direction:row-reverse;">
+                    <div style="width:28px;height:28px;border-radius:50%;background:#8B0000;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">
+                        <i class="fa-solid fa-user" style="color:#fff;font-size:.65rem;"></i>
+                    </div>
+                    <div style="background:#8B0000;color:#fff;padding:11px 16px;border-radius:16px 4px 16px 16px;font-size:.88rem;line-height:1.7;word-break:break-word;">
+                        ${escapeHtml(query)}
+                    </div>
+                </div>
+            </div>
+            <!-- Loading -->
+            <div id="${loadingId}" style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:#f9fafb;border-radius:8px;border-left:3px solid #e5e7eb;max-width:180px;">
+                <i class="fa-solid fa-robot" style="color:#8B0000;"></i>
+                <span style="font-size:.85rem;color:#888;font-style:italic;">Thinking…</span>
+            </div>
+        </div>
+    `);
+
+    inputEl.value = '';
+    showQberChip('⏳ Thinking...', '#f59e0b');
+
+    try {
+        const res  = await fetch('/api/ask-qber', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ question: query, conversation_history: qberConversationHistory })
+        });
+        const data = await res.json();
+
+        const loadingEl = el(loadingId);
+        if (loadingEl) loadingEl.remove();
+
+        if (data.error) {
+            document.getElementById(exchangeId).insertAdjacentHTML('beforeend', buildQberErrorBubble(data.error));
+            showQberChip('✗ Error', '#c5221f');
+            scrollToLatest(exchangeId);
+            return;
+        }
+
+        qberConversationHistory.push({ role: 'user',      content: query });
+        qberConversationHistory.push({ role: 'assistant', content: data.summary });
+
+        renderQberResponse(data, exchangeId);
+        showQberChip(`✓ ${data.row_count} rows`, '#137333');
+        scrollToLatest(exchangeId);
+
+    } catch (e) {
+        const loadingEl = el(loadingId);
+        if (loadingEl) loadingEl.remove();
+        document.getElementById(exchangeId).insertAdjacentHTML('beforeend',
+            buildQberErrorBubble('Network error — could not reach server. Please try again.'));
+        showQberChip('✗ Error', '#c5221f');
+        console.error('[Ask QBER]', e);
+    }
+}
+
+// ─── RENDER AI RESPONSE ───────────────────────────────────────────────────────
+function renderQberResponse(data, exchangeId) {
+    const container = document.getElementById(exchangeId);
+    const chartId   = 'qberChart_' + Date.now();
+
+    let html = `
+        <div style="display:flex;justify-content:flex-start;">
+            <div style="display:flex;align-items:flex-start;gap:8px;width:100%;">
+                <div style="width:28px;height:28px;border-radius:50%;background:#f3f4f6;border:2px solid #6366f1;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">
+                    <i class="fa-solid fa-robot" style="color:#6366f1;font-size:.65rem;"></i>
+                </div>
+                <div style="flex:1;background:#fff;border:1px solid #e5e7eb;border-radius:4px 14px 14px 14px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.05);">
+                    <p style="margin:0 0 ${data.chart ? '18px' : '0'};font-size:.9rem;line-height:1.9;color:#374151;">${data.summary}</p>
+    `;
+
+    if (data.chart) {
+        html += `
+                    <div style="background:linear-gradient(135deg,#fafbff 0%,#f0f4ff 100%);border-radius:12px;padding:18px;border:1px solid #e0e4f8;">
+                        <div style="font-size:.72rem;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.9px;margin-bottom:14px;">
+                            <i class="fa-solid fa-chart-bar" style="margin-right:5px;"></i>${escapeHtml(data.chart.title || 'Chart')}
+                        </div>
+                        <canvas id="${chartId}" style="max-height:340px;"></canvas>
+                    </div>
+        `;
+    }
+
+    html += `
+                    <div style="font-size:.72rem;color:#9ca3af;margin-top:14px;padding-top:10px;border-top:1px solid #f3f4f6;display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+                        <span><i class="fa-solid fa-database" style="margin-right:3px;"></i>${data.row_count} row${data.row_count !== 1 ? 's' : ''} returned</span>
+                        ${data.sql_used ? `
+                        <span style="cursor:pointer;color:#6366f1;font-weight:600;" onclick="const c=this.nextElementSibling;c.style.display=c.style.display==='none'?'block':'none'">View SQL ↓</span>
+                        <code style="display:none;white-space:pre-wrap;font-size:.7rem;color:#374151;margin-top:8px;background:#f3f4f6;padding:10px 12px;border-radius:6px;width:100%;box-sizing:border-box;font-family:monospace;line-height:1.6;">${escapeHtml(data.sql_used)}</code>` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.insertAdjacentHTML('beforeend', html);
+
+    if (data.chart && window.Chart) {
+        const ctx = document.getElementById(chartId);
+        if (ctx) renderQberChart(ctx, data.chart);
+    }
+}
+
+// ─── CHART RENDERER ───────────────────────────────────────────────────────────
+function renderQberChart(canvas, cfg) {
+    const type    = cfg.type || 'bar';
+    const isDonut = type === 'doughnut';
+
+    const fmtVal = (v) => {
+        if (v === null || v === undefined) return '';
+        const abs = Math.abs(v);
+        if (abs >= 1e7)  return `₹${(v / 1e7).toFixed(2)}Cr`;
+        if (abs >= 1e5)  return `₹${(v / 1e5).toFixed(2)}L`;
+        if (abs >= 1000) return v.toLocaleString('en-IN');
+        return String(v);
+    };
+
+    const datasets = (cfg.datasets || []).map((ds, i) => {
+        const col = QBER_PALETTE[i % QBER_PALETTE.length];
+        if (isDonut) {
+            return { label:ds.label, data:ds.data, backgroundColor:ds.data.map((_,j)=>QBER_PALETTE[j%QBER_PALETTE.length].bg), borderColor:ds.data.map((_,j)=>QBER_PALETTE[j%QBER_PALETTE.length].border), borderWidth:2, hoverOffset:12 };
+        }
+        if (type === 'line') {
+            return { label:ds.label, data:ds.data, backgroundColor:col.border+'22', borderColor:col.border, borderWidth:2.5, tension:0.42, fill:true, pointBackgroundColor:col.border, pointBorderColor:'#fff', pointBorderWidth:2, pointRadius:5, pointHoverRadius:8 };
+        }
+        const isMulti = (cfg.datasets||[]).length > 1;
+        if (isMulti) {
+            return { label:ds.label, data:ds.data, backgroundColor:col.border+'cc', borderColor:col.border, borderWidth:0, borderRadius:7, borderSkipped:false };
+        }
+        const barBgColors = ds.data.map((_,j) => {
+            const bc = QBER_PALETTE[j % QBER_PALETTE.length];
+            const g = canvas.getContext('2d').createLinearGradient(0,0,0,300);
+            g.addColorStop(0, bc.border+'ee');
+            g.addColorStop(1, bc.border+'44');
+            return g;
+        });
+        return { label:ds.label, data:ds.data, backgroundColor:barBgColors, borderColor:ds.data.map((_,j)=>QBER_PALETTE[j%QBER_PALETTE.length].border), borderWidth:0, borderRadius:7, borderSkipped:false };
+    });
+
+    return new Chart(canvas, {
+        type,
+        data: { labels: cfg.labels || [], datasets },
+        options: {
+            responsive:true, maintainAspectRatio:true,
+            animation:{ duration:750, easing:'easeInOutQuart' },
+            plugins: {
+                legend: { display:isDonut||datasets.length>1, position:isDonut?'right':'top', labels:{ font:{size:12}, padding:18, usePointStyle:true, pointStyleWidth:10, color:'#374151' } },
+                tooltip: { backgroundColor:'rgba(17,24,39,0.93)', titleColor:'#f9fafb', bodyColor:'#d1d5db', padding:13, cornerRadius:9, titleFont:{size:13,weight:'600'}, bodyFont:{size:12}, callbacks:{ label:(ctx)=>`  ${ctx.dataset.label||''}: ${fmtVal(ctx.raw)}` } }
+            },
+            scales: isDonut ? {} : {
+                x: { grid:{display:false}, border:{display:false}, ticks:{font:{size:11},maxRotation:40,color:'#6b7280'} },
+                y: { beginAtZero:true, grid:{color:'rgba(0,0,0,.05)',drawBorder:false}, border:{display:false}, ticks:{font:{size:11},color:'#6b7280',callback:fmtVal} }
+            }
+        }
+    });
+}
+
+// ─── SCORECARD ────────────────────────────────────────────────────────────────
+function renderRevealScorecard(data, tableBodyId) {
+    const totalEbit = data.meta ? (data.meta.total_ebit || 0) : 0;
+    const profitKeys = ['Low_Profit','Moderate_Profit','High_Profit'];
+    const lossKeys   = ['Low_Loss','Moderate_Loss','High_Loss'];
+    const beKeys     = ['Low_BE','Moderate_BE','High_BE'];
+    function sumBuckets(keys) { return keys.reduce((acc,k)=>{ const b=data[k]; if(b){acc.count+=(b.count||0);acc.ebit+=(b.total_box_ebit||0);} return acc; },{count:0,ebit:0}); }
+    const profitGiving = sumBuckets(profitKeys);
+    const lossGiving   = sumBuckets(lossKeys);
+    const breakEven    = sumBuckets(beKeys);
+    const profitPct    = totalEbit !== 0 ? Math.round((profitGiving.ebit/totalEbit)*100) : 0;
+    const lossPct      = totalEbit !== 0 ? Math.round((lossGiving.ebit/totalEbit)*100)   : 0;
+    const row = (label,count,profit,pct,bold) =>
+        `<tr${bold?' style="font-weight:700;background:#f8f9fa;"':''}>
+            <td class="sc-td"${bold?'':' style="font-weight:600;"'}>${label}</td>
+            <td class="sc-td-c">${count}</td><td class="sc-td-r">${profit}</td><td class="sc-td-r">${pct}</td>
+        </tr>`;
+    el(tableBodyId).innerHTML =
+        row('Profit Giving',profitGiving.count,formatK(profitGiving.ebit),profitPct+'%') +
+        row('Loss Giving',  lossGiving.count,  formatK(lossGiving.ebit),  lossPct+'%') +
+        row('Break-even',   breakEven.count,    formatK(0),                '0%') +
+        row('Total',        profitGiving.count+lossGiving.count+breakEven.count, formatK(totalEbit), '100%', true);
+}
+
+// ─── WHALE CURVE ──────────────────────────────────────────────────────────────
+function renderWhaleCurveWithSummary(data, chartId, summaryId, label, type, payload) {
+    const allItems = [];
+    Object.keys(data).forEach(key => { if(key !== 'meta' && data[key].details) data[key].details.forEach(item => allItems.push({ name:item.name, ebit:parseFloat(item.ebit), sales:parseFloat(item.sales) })); });
+    const sorted = allItems.sort((a,b) => b.ebit - a.ebit);
+    let sum = 0;
+    const cumulative = sorted.map(p => parseFloat((sum += p.ebit/100000).toFixed(2)));
+    const elmt = el(chartId);
+    if(!elmt) return;
+    elmt.innerHTML = '';
+    Plotly.newPlot(chartId, [{
+        x:sorted.map(p=>p.name), y:cumulative, customdata:sorted.map(p=>p.ebit/100000),
+        type:'scatter', mode:'lines+markers',
+        line:{color:'#8B0000',width:3,shape:'spline'}, marker:{size:6,color:'#333'},
+        fill:'tozeroy', fillcolor:'rgba(139,0,0,0.05)', hovertemplate:whaleTmpl
+    }], {
+        autosize:true, height:420, margin:{t:30,b:120,l:70,r:20},
+        xaxis:{title:label,tickangle:-45,automargin:true,tickfont:{size:10}},
+        yaxis:{title:'Cumulative EBIT (Lakhs)',titlefont:{size:12}},
+        plot_bgcolor:'#fff', paper_bgcolor:'#fff'
+    }, {responsive:true, displayModeBar:false});
+    setTimeout(() => { try { Plotly.Plots.resize(el(chartId)); } catch(e){} }, 150);
+    generateWhaleSummary(data, allItems, sorted, type, payload, summaryId);
+}
+
+function generateWhaleSummary(data, allItems, sortedItems, type, payload, summaryId) {
+    const itemType = type === 'product' ? 'products' : 'customers';
+    const itemTypeSingular = type === 'product' ? 'product' : 'customer';
+    const profitMakers = sortedItems.filter(p=>p.ebit>0);
+    const lossMakers   = sortedItems.filter(p=>p.ebit<0);
+    const profitSum    = profitMakers.reduce((s,p)=>s+p.ebit,0);
+    const lossSum      = lossMakers.reduce((s,p)=>s+p.ebit,0);
+    const totalEbit    = data.meta.total_ebit  || 0;
+    const totalSales   = data.meta.total_sales || 0;
+    const profitPct    = ((profitMakers.length/allItems.length)*100).toFixed(0);
+    const lossPct      = ((lossMakers.length/allItems.length)*100).toFixed(0);
+    const top20Count   = Math.ceil(allItems.length * 0.2);
+    const top20Items   = sortedItems.slice(0,top20Count);
+    const top20Ebit    = top20Items.reduce((s,p)=>s+p.ebit,0);
+    const top20Sales   = top20Items.reduce((s,p)=>s+p.sales,0);
+    const curveDescription = lossMakers.length > allItems.length*0.5 ? "upward and prolonged stagnated whale curve which drops steadily" : lossMakers.length > allItems.length*0.3 ? "moderately concentrated whale curve with significant loss-making segment" : "healthy whale curve with limited loss makers";
+    const fyText = payload.years[0] !== 'All' ? `FY ${payload.years[0]}` : 'the analyzed period';
+    let summary = `The representation of profit concentration provided by a whale curve can be eye-opening. Understanding how few ${itemType} create profit and how many destroy it can be a firm's call-to-action to identify and remove complexity costs. `;
+    summary += `Qber has a <strong>${curveDescription}</strong>. `;
+    summary += `In Qber for ${fyText}, <strong>${profitPct}%</strong> of the ${itemType} sold gave a profit of <strong>${formatK(profitSum)}</strong>, whereas <strong>${lossPct}%</strong> eroded <strong>${formatK(Math.abs(lossSum))}</strong> bringing the overall profit to <strong>${formatK(totalEbit)}</strong>. `;
+    if(top20Sales > 0 && totalSales > 0) {
+        const salesPct    = ((top20Sales/totalSales)*100).toFixed(0);
+        const profitTimes = totalEbit > 0 ? (top20Ebit/totalEbit).toFixed(1) : 0;
+        summary += `The top 20% account for <strong>${salesPct}%</strong> of sales and generate nearly <strong>${profitTimes}×</strong> the realized profit.`;
+    }
+    el(summaryId).innerHTML = `<p style="margin:0;font-size:.95rem;line-height:1.8;color:#374151;text-align:justify;">${summary}</p>`;
+}
+
+// ─── BU WHALE CURVES ─────────────────────────────────────────────────────────
+async function renderBUWhaleCurves(basePayload, matrixType, containerId, summaryContainerId, useMatrixDB) {
+    const container       = el(containerId);
+    const summaryContainer = el(summaryContainerId);
+    const itemLabel = matrixType === 'product' ? 'Products' : 'Customers';
+    const itemType  = matrixType === 'product' ? 'products' : 'customers';
+    const buEndpoint = useMatrixDB ? '/api/matrix_data_old' : '/api/matrix_data';
+    container.innerHTML = '';
+    if(summaryContainer) summaryContainer.innerHTML = '';
+
+    try {
+        // Fetch BU list
+        const opts = await fetch('/api/get_filter_options').then(r=>r.json());
+        const allBUs = (opts.bus || []).filter(v => v !== 'All');
+        if(!allBUs.length) { container.innerHTML='<div style="text-align:center;padding:40px;color:#999;">No BU data</div>'; return; }
+
+        for(const bu of allBUs) {
+            const data = await postJSON(buEndpoint, {...basePayload, bu, matrix_type:matrixType});
+            if(!data.meta) continue;
+            const items = [];
+            Object.keys(data).forEach(key => { if(key !== 'meta' && data[key].details) data[key].details.forEach(item => items.push({ name:item.name, ebit:parseFloat(item.ebit), sales:parseFloat(item.sales||0) })); });
+            if(!items.length) continue;
+            const sorted = items.sort((a,b)=>b.ebit-a.ebit);
+            let sum=0; const cumulative = sorted.map(p=>parseFloat((sum+=p.ebit/100000).toFixed(2)));
+            const safeId  = bu.replace(/[^a-zA-Z0-9]/g,'_');
+            const chartId = `buChart_${matrixType}_${safeId}`;
+            const chartDiv = document.createElement('div');
+            chartDiv.className = 'bu-chart-card';
+            chartDiv.innerHTML = `<h4 class="bu-chart-title">${bu}</h4><div id="${chartId}" style="width:100%;height:180px;min-height:180px;"></div>`;
+            container.appendChild(chartDiv);
+            const chartEl = document.getElementById(chartId);
+            const chartW  = (chartEl && chartEl.offsetWidth > 0) ? chartEl.offsetWidth : 320;
+            Plotly.newPlot(chartId, [{
+                x:sorted.map(p=>p.name), y:cumulative, type:'scatter', mode:'lines+markers',
+                line:{color:'#8B0000',width:2,shape:'spline'}, marker:{size:4,color:'#333'},
+                fill:'tozeroy', fillcolor:'rgba(139,0,0,0.1)',
+                hovertemplate:'<b>%{x}</b><br>Cumulative EBIT: %{y:.2f}L<extra></extra>'
+            }], {
+                autosize:false, width:chartW, height:180, margin:{t:5,b:35,l:45,r:5},
+                xaxis:{title:{text:itemLabel,font:{size:9}},showticklabels:false,showgrid:false},
+                yaxis:{title:{text:'Cumulative EBIT (L)',font:{size:9}},showgrid:true,gridcolor:'#e5e7eb'},
+                plot_bgcolor:'#fafafa', paper_bgcolor:'white', showlegend:false
+            }, {displayModeBar:false});
+
+            if(summaryContainer) {
+                const buSummaryText = generateBUSummaryText(bu, data, items, sorted, itemType, basePayload);
+                const block = document.createElement('div');
+                block.className = 'bu-summary-block';
+                block.innerHTML = `<div class="bu-summary-block-title"><i class="fa-solid fa-circle-info"></i> ${bu} — ${matrixType==='product'?'Product':'Customer'} Analysis</div><p>${buSummaryText}</p>`;
+                summaryContainer.appendChild(block);
+            }
+        }
+    } catch(e) {
+        console.error('BU Whale Curves Error:', e);
+        container.innerHTML='<div style="text-align:center;padding:40px;color:#dc2626;">Error loading BU data</div>';
+    }
+
+    // Relayout after render
+    const relayout = () => { container.querySelectorAll('[id^="buChart_"]').forEach(c=>{ const w=c.offsetWidth; if(w>0){try{Plotly.relayout(c,{width:w,height:180});}catch(e){}} }); };
+    setTimeout(relayout,150); setTimeout(relayout,500); setTimeout(relayout,1200);
+}
+
+function generateBUSummaryText(bu, data, allItems, sortedItems, itemType, payload) {
+    const profitMakers = sortedItems.filter(p=>p.ebit>0);
+    const lossMakers   = sortedItems.filter(p=>p.ebit<0);
+    const profitSum    = profitMakers.reduce((s,p)=>s+p.ebit,0);
+    const lossSum      = lossMakers.reduce((s,p)=>s+p.ebit,0);
+    const totalEbit    = data.meta.total_ebit  || 0;
+    const totalSales   = data.meta.total_sales || 0;
+    const n            = allItems.length;
+    if(!n) return `No ${itemType} data for ${bu}.`;
+    const profitPct = ((profitMakers.length/n)*100).toFixed(0);
+    const lossPct   = ((lossMakers.length/n)*100).toFixed(0);
+    const top20n    = Math.ceil(n*0.2);
+    const top20Ebit = sortedItems.slice(0,top20n).reduce((s,p)=>s+p.ebit,0);
+    const top20Sal  = sortedItems.slice(0,top20n).reduce((s,p)=>s+(p.sales||0),0);
+    const shape = lossMakers.length>n*0.5 ? "a steeply declining curve indicating significant profitability drag" : lossMakers.length>n*0.3 ? "a moderately concentrated curve with a notable loss-making tail" : "a healthy curve with most items contributing positively";
+    const fyText = payload.years?.[0] !== 'All' ? `FY ${payload.years[0]}` : 'the analyzed period';
+    let txt = `For <strong>${bu}</strong> in ${fyText}, the whale curve exhibits ${shape}. `;
+    txt += `Out of ${n} ${itemType}, <strong>${profitPct}%</strong> (${profitMakers.length}) are profit-generating contributing <strong>${formatK(profitSum)}</strong>, `;
+    txt += `while <strong>${lossPct}%</strong> (${lossMakers.length}) erode <strong>${formatK(Math.abs(lossSum))}</strong>, resulting in a net EBIT of <strong>${formatK(totalEbit)}</strong>.`;
+    if(top20Sal>0 && totalSales>0) {
+        const salesPct = ((top20Sal/totalSales)*100).toFixed(0);
+        const profitTimes = totalEbit!==0 ? (top20Ebit/totalEbit).toFixed(1) : '—';
+        txt += ` The top 20% of ${itemType} (${top20n} items) account for <strong>${salesPct}%</strong> of BU sales and generate approximately <strong>${profitTimes}×</strong> the realized EBIT.`;
+    }
+    return txt;
+}
+
+// ─── LOAD SUMMARY DATA ────────────────────────────────────────────────────────
+async function loadQberSummaryData(type) {
+    const payload = getBasePayload();
+    const waitFrame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 120)));
+
+    try {
+        if(type === 'product') {
+            const prodData = await postJSON('/api/matrix_data_old', {...payload, matrix_type:'product'});
+            if(!prodData.meta) return;
+            renderRevealScorecard(prodData, 'qberProductScorecardBody');
+            await waitFrame();
+            renderWhaleCurveWithSummary(prodData, 'qberProductWhaleCurve', 'qberProductWhaleSummary', 'Products', 'product', payload);
+            await waitFrame();
+            await renderBUWhaleCurves(payload, 'product', 'qberBuWhaleCurvesContainer', 'qberBuProductSummariesContainer', true);
+        } else {
+            const custData = await postJSON('/api/matrix_data_old', {...payload, matrix_type:'customer'});
+            if(!custData.meta) return;
+            renderRevealScorecard(custData, 'qberCustomerScorecardBody');
+            await waitFrame();
+            renderWhaleCurveWithSummary(custData, 'qberCustomerWhaleCurve', 'qberCustomerWhaleSummary', 'Customers', 'customer', payload);
+            await waitFrame();
+            await renderBUWhaleCurves(payload, 'customer', 'qberBuCustomerWhaleCurvesContainer', 'qberBuCustomerSummariesContainer', true);
+        }
+        setTimeout(() => resizePlotly(), 150);
+        setTimeout(() => resizePlotly(), 500);
+    } catch(e) { console.error('QBER summary load error:', e); }
+}
+
+// ─── PDF DOWNLOAD ─────────────────────────────────────────────────────────────
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        if(document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+        const s = document.createElement('script'); s.src=src; s.onload=resolve; s.onerror=reject; document.head.appendChild(s);
+    });
+}
+
+async function downloadViewPDF(viewType) {
+    const btn = document.querySelector(`button[onclick="downloadViewPDF('${viewType}')"]`);
+    if(!btn || btn.disabled) return;
+    btn.disabled = true;
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>&nbsp;Generating…';
+
+    try {
+        if(!window.html2canvas) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+        if(!window.jspdf)       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        if(!window.jspdf?.jsPDF?.prototype?.autoTable) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js');
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p','mm','a4');
+        const pageW=pdf.internal.pageSize.getWidth(), pageH=pdf.internal.pageSize.getHeight();
+        const margin=12, contentW=pageW-margin*2;
+        const now=new Date(); let y=margin, pageNum=1;
+        const cap = s => s.charAt(0).toUpperCase()+s.slice(1);
+
+        const addHeader=()=>{ pdf.setFillColor(139,0,0); pdf.rect(0,0,pageW,20,'F'); pdf.setTextColor(255,255,255); pdf.setFontSize(13); pdf.setFont(undefined,'bold'); pdf.text(`${cap(viewType)} Summary Report`,margin,14); pdf.setFontSize(8); pdf.setFont(undefined,'normal'); pdf.text(now.toLocaleDateString(),pageW-margin,12,{align:'right'}); pdf.setTextColor(0,0,0); };
+        const addFooter=pNum=>{ pdf.setFontSize(7); pdf.setTextColor(140,140,140); pdf.text(`Generated: ${now.toLocaleString()}`,margin,pageH-5); pdf.text(`Page ${pNum}`,pageW-margin,pageH-5,{align:'right'}); pdf.setTextColor(0,0,0); };
+        const checkBreak=needed=>{ if(y+needed>pageH-15){addFooter(pageNum);pdf.addPage();pageNum++;addHeader();y=25;return true;} return false; };
+        const captureEl=async(domEl,maxH)=>{ if(!domEl||domEl.offsetParent===null) return; try{ const canvas=await html2canvas(domEl,{scale:2,useCORS:true,backgroundColor:'#ffffff'}); const w=contentW; let h=(canvas.height/canvas.width)*w; if(maxH) h=Math.min(h,maxH); checkBreak(h+4); pdf.addImage(canvas.toDataURL('image/png'),'PNG',margin,y,w,h); y+=h+6; }catch(e){console.error(e);} };
+
+        addHeader(); y=25;
+        // Scorecard
+        pdf.setFontSize(11); pdf.setFont(undefined,'bold'); pdf.text(`${cap(viewType)} Reveal Scorecard`,pageW/2,y,{align:'center'}); y+=8;
+        const scorecardId = viewType==='product'?'qberProductScorecardBody':'qberCustomerScorecardBody';
+        const tableRows   = Array.from(document.querySelectorAll(`#${scorecardId} tr`)).map(r=>Array.from(r.querySelectorAll('td')).map(c=>c.innerText.trim()));
+        pdf.autoTable({startY:y,head:[['Particulars','Count','Profit','%']],body:tableRows,tableWidth:contentW*0.55,margin:{left:margin+(contentW*0.45)/2,right:margin},theme:'grid',styles:{fontSize:8,cellPadding:2.5},headStyles:{fillColor:[139,0,0],textColor:255,fontStyle:'bold'}});
+        y=pdf.lastAutoTable.finalY+12;
+        // Whale curve
+        checkBreak(90); pdf.setFontSize(11); pdf.setFont(undefined,'bold'); pdf.text(`${cap(viewType)} Wise Profit Whale Curve`,pageW/2,y,{align:'center'}); y+=8;
+        await captureEl(el(viewType==='product'?'qberProductWhaleCurve':'qberCustomerWhaleCurve'),80);
+        const summaryEl=el(viewType==='product'?'qberProductWhaleSummary':'qberCustomerWhaleSummary');
+        if(summaryEl?.innerHTML?.trim()){ const txt=summaryEl.innerText.trim(); pdf.setFontSize(8.5); pdf.setFont(undefined,'normal'); pdf.splitTextToSize(txt,contentW).forEach(line=>{checkBreak(5);pdf.text(line,margin,y);y+=4.5;}); y+=3; }
+        y+=4;
+        // BU charts
+        const buContId = viewType==='product'?'qberBuWhaleCurvesContainer':'qberBuCustomerWhaleCurvesContainer';
+        const buContainer2 = el(buContId);
+        const buCharts = buContainer2 ? buContainer2.querySelectorAll('[id^="buChart_"]') : [];
+        if(buCharts.length>0){
+            checkBreak(50); pdf.setFontSize(11); pdf.setFont(undefined,'bold'); pdf.text(`BU-wise ${cap(viewType)} EBIT Whale Curves`,pageW/2,y,{align:'center'}); y+=8;
+            const buChartW=(contentW-6)/3; let col=0, rowY=y;
+            for(let i=0;i<buCharts.length;i++){
+                if(col===3){col=0;y+=48;rowY=y;checkBreak(55);}
+                const xPos=margin+col*(buChartW+3);
+                const buTitle=buCharts[i].parentElement.querySelector('h4')?.innerText||`BU ${i+1}`;
+                pdf.setFontSize(7); pdf.setFont(undefined,'bold'); pdf.text(buTitle,xPos+buChartW/2,rowY-1,{align:'center'});
+                try{ const canvas=await html2canvas(buCharts[i],{scale:1.5,useCORS:true,backgroundColor:'#ffffff'}); const buH=(canvas.height/canvas.width)*buChartW; pdf.addImage(canvas.toDataURL('image/png'),'PNG',xPos,rowY,buChartW,Math.min(buH,42)); }catch(e){}
+                col++;
+            }
+            y=rowY+52;
+        }
+
+        const totalPages=pdf.internal.getNumberOfPages();
+        for(let i=1;i<=totalPages;i++){pdf.setPage(i);addFooter(i);}
+        pdf.save(`Qber_${cap(viewType)}_Summary_${now.toISOString().split('T')[0]}.pdf`);
+    } catch(err) {
+        console.error('PDF error:',err);
+        alert('Could not generate PDF. Ensure summary data is loaded first.');
+    } finally {
+        btn.disabled=false; btn.innerHTML=origHtml;
+    }
+}
+
+// Auto-focus input on load
+document.addEventListener('DOMContentLoaded', () => el('qberInput')?.focus());
+</script>
+</body>
+</html>

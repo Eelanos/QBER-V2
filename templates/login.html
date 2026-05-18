@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Qber — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --qber-red:     #9B1C1C;
+      --qber-red-dk:  #7B1111;
+      --qber-red-lt:  #C53030;
+      --qber-dark:    #111827;
+      --qber-darker:  #0D1117;
+      --qber-panel:   #1A2332;
+      --qber-border:  rgba(255,255,255,0.08);
+      --qber-muted:   rgba(255,255,255,0.45);
+      --qber-input:   rgba(255,255,255,0.06);
+      --qber-input-f: rgba(255,255,255,0.10);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--qber-darker);
+      font-family: 'DM Sans', sans-serif;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    /* ── Background grid lines ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(155,28,28,0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(155,28,28,0.06) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Red glow blob ── */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -120px;
+      left: -120px;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(155,28,28,0.18) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    /* ── Card ── */
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: rgba(26, 35, 50, 0.85);
+      border: 1px solid var(--qber-border);
+      border-radius: 16px;
+      padding: 2.5rem 2.5rem 2rem;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 32px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(155,28,28,0.15);
+      animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Logo block ── */
+    .logo-block {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 2rem;
+    }
+
+    .logo-badge {
+      width: 42px;
+      height: 42px;
+      background: var(--qber-red);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-badge span {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      color: #fff;
+      letter-spacing: 1px;
+      line-height: 1;
+    }
+
+    .logo-text {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      letter-spacing: 3px;
+      color: #fff;
+    }
+
+    /* ── Heading ── */
+    .heading {
+      font-size: 22px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .subheading {
+      font-size: 14px;
+      color: var(--qber-muted);
+      margin-bottom: 2rem;
+    }
+
+    /* ── Form ── */
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--qber-muted);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      height: 44px;
+      background: var(--qber-input);
+      border: 1px solid var(--qber-border);
+      border-radius: 8px;
+      padding: 0 14px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      color: #fff;
+      outline: none;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    input[type="text"]::placeholder,
+    input[type="password"]::placeholder {
+      color: rgba(255,255,255,0.2);
+    }
+
+    input[type="text"]:focus,
+    input[type="password"]:focus {
+      border-color: var(--qber-red-lt);
+      background: var(--qber-input-f);
+    }
+
+    /* ── Error message ── */
+    .error-box {
+      background: rgba(155, 28, 28, 0.15);
+      border: 1px solid rgba(155, 28, 28, 0.5);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #FCA5A5;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .error-box::before {
+      content: '⚠';
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    /* ── Submit button ── */
+    .btn-login {
+      width: 100%;
+      height: 46px;
+      background: var(--qber-red);
+      border: none;
+      border-radius: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      transition: background 0.2s, transform 0.1s;
+      margin-top: 1.25rem;
+    }
+
+    .btn-login:hover {
+      background: var(--qber-red-lt);
+    }
+
+    .btn-login:active {
+      transform: scale(0.98);
+    }
+
+    /* ── Footer ── */
+    .card-footer {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--qber-border);
+      font-size: 12px;
+      color: rgba(255,255,255,0.25);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+
+      <div class="logo-block">
+        <div class="logo-badge"><span>Q</span></div>
+        <span class="logo-text">QBER</span>
+      </div>
+
+      <p class="heading">Sign in to the portal</p>
+      <p class="subheading">Enter your credentials to access the dashboard</p>
+      {% if error %}
+      <div class="error-box">{{ error }}</div>
+      {% endif %}
+
+      <form method="POST" action="/login">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            `
+            placeholder="Enter username"
+            autocomplete="username"
+            autofocus
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="Enter password"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+
+        <button type="submit" class="btn-login">Sign In →</button>
+      </form>
+
+      <div class="card-footer">
+        Secure access · Qber Analytics Platform
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>
