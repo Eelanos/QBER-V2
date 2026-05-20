@@ -341,6 +341,40 @@ def matrix_data():
         return jsonify({'error': str(e)})
 
 
+@app.route('/test-db')
+def test_db():
+    import os
+    import mysql.connector
+    results = {}
+
+    try:
+        conn = mysql.connector.connect(
+            host=os.environ.get('MYSQL_HOST'),
+            user=os.environ.get('MYSQL_USER'),
+            password=os.environ.get('MYSQL_PASSWORD'),
+            database=os.environ.get('MYSQL_DB'),
+            connect_timeout=5
+        )
+        conn.close()
+        results['main_db'] = '✅ Connected'
+    except Exception as e:
+        results['main_db'] = f'❌ Failed: {str(e)}'
+
+    try:
+        conn2 = mysql.connector.connect(
+            host=os.environ.get('MYSQL_MATRIX_HOST'),
+            user=os.environ.get('MYSQL_MATRIX_USER'),
+            password=os.environ.get('MYSQL_MATRIX_PASSWORD'),
+            database=os.environ.get('MYSQL_MATRIX_DB'),
+            connect_timeout=5
+        )
+        conn2.close()
+        results['matrix_db'] = '✅ Connected'
+    except Exception as e:
+        results['matrix_db'] = f'❌ Failed: {str(e)}'
+
+    return results
+
 @app.route('/api/curve_dashboard_data_matrix', methods=['POST'])
 def curve_dashboard_data_matrix():
     """
