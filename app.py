@@ -181,8 +181,10 @@ def get_filter_options():
         })
     except Exception as e:
         print(f"Filter Error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify(
-            {'plants': [], 'bus': [], 'customers': [], 'products': [], 'years': [], 'months': [], 'fy_month_map': {}})
+            {'plants': [], 'bus': [], 'customers': [], 'product_groups': [], 'segments': [], 'years': [], 'months': [], 'fy_month_map': {}})
 
 
 @app.route('/api/curve_dashboard_data', methods=['POST'])
