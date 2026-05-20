@@ -375,6 +375,38 @@ def test_db():
 
     return results
 
+
+@app.route('/test-db-read')
+def test_db_read():
+    import os, mysql.connector
+    from flask import jsonify
+    results = {}
+    try:
+        conn = mysql.connector.connect(
+            host=os.environ.get('MYSQL_HOST'),
+            user=os.environ.get('MYSQL_USER'),
+            password=os.environ.get('MYSQL_PASSWORD'),
+            database=os.environ.get('MYSQL_DB'),
+            connect_timeout=5
+        )
+        cursor = conn.cursor()
+
+        # Check what tables exist
+        cursor.execute("SHOW TABLES;")
+        tables = cursor.fetchall()
+        results['tables'] = [t[0] for t in tables]
+
+        # Check row count of first table if any
+        if tables:
+            cursor.execute(f"SELECT COUNT(*) FROM {tables[0][0]};")
+            results['first_table_count'] = cursor.fetchone()[0]
+
+        conn.close()
+    except Exception as e:
+        results['error'] = str(e)
+
+    return jsonify(results)
+
 @app.route('/api/curve_dashboard_data_matrix', methods=['POST'])
 def curve_dashboard_data_matrix():
     """
