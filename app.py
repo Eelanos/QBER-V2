@@ -32,28 +32,43 @@ DB_CREDS_MATRIX = {
     "d": os.getenv("MYSQL_MATRIX_DB")
 }
 
+from sqlalchemy import create_engine
+
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///local_auth.db'
-app.config['SQLALCHEMY_BINDS'] = {
-    'external_mysql':        f"mysql+pymysql://{DB_CREDS['u']}:{DB_CREDS['p']}@{DB_CREDS['h']}/{DB_CREDS['d']}",
-    'external_mysql_matrix': f"mysql+pymysql://{DB_CREDS_MATRIX['u']}:{DB_CREDS_MATRIX['p']}@{DB_CREDS_MATRIX['h']}/{DB_CREDS_MATRIX['d']}"
-}
 db = SQLAlchemy(app)
 
+MAIN_DB_URL = (
+    f"mysql+pymysql://{DB_CREDS['u']}:{DB_CREDS['p']}"
+    f"@{DB_CREDS['h']}/{DB_CREDS['d']}"
+)
 
+MATRIX_DB_URL = (
+    f"mysql+pymysql://{DB_CREDS_MATRIX['u']}:{DB_CREDS_MATRIX['p']}"
+    f"@{DB_CREDS_MATRIX['h']}/{DB_CREDS_MATRIX['d']}"
+)
+
+main_engine = create_engine(
+    MAIN_DB_URL,
+    pool_pre_ping=True,
+    pool_recycle=3600
+)
+
+matrix_engine = create_engine(
+    MATRIX_DB_URL,
+    pool_pre_ping=True,
+    pool_recycle=3600
+)
 # ==========================================
 # 2. HELPERS
 # ==========================================
 def fetch_data(sql, params=None):
-    with app.app_context():
-        with db.engines['external_mysql'].connect() as conn:
-            return pd.read_sql_query(text(sql), conn, params=params)
+    with main_engine.connect() as conn:
+        return pd.read_sql_query(text(sql), conn, params=params)
 
 
 def fetch_data_matrix(sql, params=None):
-    """Read from pc_analysis_matrix database (old dataset – used for QBER Cost Matrix)."""
-    with app.app_context():
-        with db.engines['external_mysql_matrix'].connect() as conn:
-            return pd.read_sql_query(text(sql), conn, params=params)
+    with matrix_engine.connect() as conn:
+        return pd.read_sql_query(text(sql), conn, params=params)
 
 
 def get_fy_sort_key(month_name):
@@ -1241,4 +1256,4 @@ import ask_qber
 ask_qber.init(app, fetch_data)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)
