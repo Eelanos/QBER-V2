@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>My Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+body{
+    margin:0;
+    padding:30px;
+    font-family:'Segoe UI',sans-serif;
+    background:#f4f5f7;
+}
+.page-title{
+    font-size:28px;
+    font-weight:700;
+    margin-bottom:30px;
+    color:#8B0000;
+}
+.dashboard-grid{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:24px;
+}
+.widget-card{
+    background:white;
+    border-radius:12px;
+    padding:20px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.08);
+}
+.widget-title{
+    font-size:18px;
+    font-weight:700;
+    margin-bottom:14px;
+}
+.widget-summary{
+    color:#555;
+    line-height:1.7;
+    margin-top:16px;
+}
+.widget-footer{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-top:20px;
+}
+.delete-btn{
+    background:#dc2626;
+    color:white;
+    border:none;
+    padding:8px 14px;
+    border-radius:6px;
+    cursor:pointer;
+}
+.chart-box{
+    height:300px;
+}
+.empty-state{
+    text-align:center;
+    margin-top:80px;
+    color:#888;
+    font-size:20px;
+}
+</style>
+</head>
+<body>
+
+<div class="page-title">⭐ My Dashboard</div>
+
+<div id="dashboardGrid" class="dashboard-grid"></div>
+
+<script>
+const palette = [
+    '#6366F1','#10B981','#F59E0B','#3B82F6',
+    '#A855F7','#EC4899','#14B8A6','#EF4444'
+];
+
+async function loadDashboard() {
+    const res = await fetch('/api/saved-widgets');
+    const widgets = await res.json();
+
+    const grid = document.getElementById('dashboardGrid');
+
+    if (!widgets.length) {
+        grid.innerHTML = `<div class="empty-state">No saved widgets yet</div>`;
+        return;
+    }
+
+    grid.innerHTML = widgets.map(widget => `
+        <div class="widget-card">
+            <div class="widget-title">${widget.question}</div>
+            <div class="chart-box">
+                <canvas id="chart_${widget.id}"></canvas>
+            </div>
+            <div class="widget-summary">${widget.summary}</div>
+            <div class="widget-footer">
+                <span>${widget.created_at}</span>
+                <button class="delete-btn" onclick="deleteWidget(${widget.id})">
+                    Delete
+                </button>
+            </div>
+        </div>
+    `).join('');
+
+    widgets.forEach(widget => {
+        if(widget.chart){
+            renderChart(widget);
+        }
+    });
+}
+
+function renderChart(widget){
+    const canvas = document.getElementById(`chart_${widget.id}`);
+    if(!canvas) return;
+
+    new Chart(canvas,{
+        type: widget.chart.type || 'bar',
+        data: {
+            labels: widget.chart.labels || [],
+            datasets: widget.chart.datasets
+        },
+        options:{
+            responsive:true,
+            maintainAspectRatio:false
+        }
+    });
+}
+
+async function deleteWidget(id){
+    const res = await fetch(`/api/delete-widget/${id}`, {
+        method:'DELETE'
+    });
+
+    const result = await res.json();
+
+    if(result.success){
+        loadDashboard();
+    }
+}
+
+loadDashboard();
+</script>
+</body>
+</html>

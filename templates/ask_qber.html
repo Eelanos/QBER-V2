@@ -305,6 +305,9 @@ const whaleTmpl = '<b>%{text}</b><br> EBIT: %{customdata:,.2f} Lakhs<extra></ext
 // ─── CONVERSATION STATE ───────────────────────────────────────────────────────
 let qberConversationHistory = [];
 
+let latestQberResponse = null;
+let latestQuestion = null;
+
 function resetQberView() {
     el('qberProductView').style.display      = 'none';
     el('qberCustomerView').style.display     = 'none';
@@ -412,8 +415,8 @@ async function handleQberQuery() {
         const loadingEl = el(loadingId);
         if (loadingEl) loadingEl.remove();
 
-        if (data.error) {
-            document.getElementById(exchangeId).insertAdjacentHTML('beforeend', buildQberErrorBubble(data.error));
+        if (!data.summary) {
+            document.getElementById(exchangeId).insertAdjacentHTML('beforeend', buildQberErrorBubble('Unable to process request.'));
             showQberChip('✗ Error', '#c5221f');
             scrollToLatest(exchangeId);
             return;
@@ -421,9 +424,15 @@ async function handleQberQuery() {
 
         qberConversationHistory.push({ role: 'user',      content: query });
         qberConversationHistory.push({ role: 'assistant', content: data.summary });
+        latestQuestion = query;
+        latestQberResponse = data;
+
 
         renderQberResponse(data, exchangeId);
-        showQberChip(`✓ ${data.row_count} rows`, '#137333');
+        showQberChip(
+            data.row_count ? `✓ ${data.row_count} rows` : '✓ Response ready',
+            '#137333'
+        );
         scrollToLatest(exchangeId);
 
     } catch (e) {
@@ -463,6 +472,23 @@ function renderQberResponse(data, exchangeId) {
     }
 
     html += `
+                    <div style="display:flex;justify-content:flex-end;margin-top:16px;margin-bottom:10px;">
+                        <button id="saveWidgetBtn" onclick="window.parent.openSaveModal()"
+                            style="
+                                background:#8B0000;
+                                color:white;
+                                border:none;
+                                padding:8px 14px;
+                                border-radius:6px;
+                                cursor:pointer;
+                                font-size:.82rem;
+                                font-weight:600;
+                                transition:all 0.3s ease;
+                            ">
+                            ☆ Save Dashboard
+                        </button>
+                    </div>
+
                     <div style="font-size:.72rem;color:#9ca3af;margin-top:14px;padding-top:10px;border-top:1px solid #f3f4f6;display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
                         <span><i class="fa-solid fa-database" style="margin-right:3px;"></i>${data.row_count} row${data.row_count !== 1 ? 's' : ''} returned</span>
                         ${data.sql_used ? `
@@ -486,6 +512,7 @@ function renderQberResponse(data, exchangeId) {
 function renderQberChart(canvas, cfg) {
     const type    = cfg.type || 'bar';
     const isDonut = type === 'doughnut';
+    const isCombo = type === 'combo';
 
     const fmtVal = (v) => {
         if (v === null || v === undefined) return '';
@@ -498,6 +525,40 @@ function renderQberChart(canvas, cfg) {
 
     const datasets = (cfg.datasets || []).map((ds, i) => {
         const col = QBER_PALETTE[i % QBER_PALETTE.length];
+        const isComboBar = cfg.type === 'combo' && ds.type === 'bar';
+        const isComboLine = cfg.type === 'combo' && ds.type === 'line';
+        if (isCombo) {
+            if (ds.type === 'line') {
+                return {
+                    type: 'line',
+                    label: ds.label,
+                    data: ds.data,
+                    yAxisID: ds.yAxisID,
+                    borderColor: '#1d4ed8',   // dark blue
+                    backgroundColor: '#1d4ed8',
+                    borderWidth: 3,
+                    tension: 0.42,
+                    fill: false,
+                    pointBackgroundColor: '#1d4ed8',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 8
+                };
+            }
+
+            return {
+                type: 'bar',
+                label: ds.label,
+                data: ds.data,
+                yAxisID: ds.yAxisID,
+                backgroundColor: 'rgba(147,197,253,0.65)',   // light blue
+                borderColor: '#93c5fd',
+                borderWidth: 1,
+                borderRadius: 7,
+                borderSkipped: false
+            };
+        }
         if (isDonut) {
             return { label:ds.label, data:ds.data, backgroundColor:ds.data.map((_,j)=>QBER_PALETTE[j%QBER_PALETTE.length].bg), borderColor:ds.data.map((_,j)=>QBER_PALETTE[j%QBER_PALETTE.length].border), borderWidth:2, hoverOffset:12 };
         }
@@ -528,37 +589,132 @@ function renderQberChart(canvas, cfg) {
                 legend: { display:isDonut||datasets.length>1, position:isDonut?'right':'top', labels:{ font:{size:12}, padding:18, usePointStyle:true, pointStyleWidth:10, color:'#374151' } },
                 tooltip: { backgroundColor:'rgba(17,24,39,0.93)', titleColor:'#f9fafb', bodyColor:'#d1d5db', padding:13, cornerRadius:9, titleFont:{size:13,weight:'600'}, bodyFont:{size:12}, callbacks:{ label:(ctx)=>`  ${ctx.dataset.label||''}: ${fmtVal(ctx.raw)}` } }
             },
-            scales: isDonut ? {} : {
-                x: { grid:{display:false}, border:{display:false}, ticks:{font:{size:11},maxRotation:40,color:'#6b7280'} },
-                y: { beginAtZero:true, grid:{color:'rgba(0,0,0,.05)',drawBorder:false}, border:{display:false}, ticks:{font:{size:11},color:'#6b7280',callback:fmtVal} }
-            }
+            scales: isDonut ? {} : (
+                isCombo ? {
+                    x: {
+                        grid:{display:false},
+                        border:{display:false}
+                    },
+                    y: {
+                        type:'linear',
+                        position:'left',
+                        beginAtZero:true,
+                        grid:{color:'rgba(0,0,0,.05)',drawBorder:false},
+                        ticks:{
+                            color:'#6b7280',
+                            callback: fmtVal
+                        }
+                    },
+                    y1: {
+                        type:'linear',
+                        position:'right',
+                        beginAtZero:true,
+                        grid:{drawOnChartArea:false},
+                        ticks:{
+                            color:'#6b7280',
+                            callback:(v)=>`${v}%`
+                        }
+                    }
+                } : {
+                    x: { grid:{display:false}, border:{display:false}, ticks:{font:{size:11},maxRotation:40,color:'#6b7280'} },
+                    y: { beginAtZero:true, grid:{color:'rgba(0,0,0,.05)',drawBorder:false}, border:{display:false}, ticks:{font:{size:11},color:'#6b7280',callback:fmtVal} }
+                }
+            )
         }
     });
 }
 
-// ─── SCORECARD ────────────────────────────────────────────────────────────────
-function renderRevealScorecard(data, tableBodyId) {
-    const totalEbit = data.meta ? (data.meta.total_ebit || 0) : 0;
-    const profitKeys = ['Low_Profit','Moderate_Profit','High_Profit'];
-    const lossKeys   = ['Low_Loss','Moderate_Loss','High_Loss'];
-    const beKeys     = ['Low_BE','Moderate_BE','High_BE'];
-    function sumBuckets(keys) { return keys.reduce((acc,k)=>{ const b=data[k]; if(b){acc.count+=(b.count||0);acc.ebit+=(b.total_box_ebit||0);} return acc; },{count:0,ebit:0}); }
-    const profitGiving = sumBuckets(profitKeys);
-    const lossGiving   = sumBuckets(lossKeys);
-    const breakEven    = sumBuckets(beKeys);
-    const profitPct    = totalEbit !== 0 ? Math.round((profitGiving.ebit/totalEbit)*100) : 0;
-    const lossPct      = totalEbit !== 0 ? Math.round((lossGiving.ebit/totalEbit)*100)   : 0;
-    const row = (label,count,profit,pct,bold) =>
-        `<tr${bold?' style="font-weight:700;background:#f8f9fa;"':''}>
-            <td class="sc-td"${bold?'':' style="font-weight:600;"'}>${label}</td>
-            <td class="sc-td-c">${count}</td><td class="sc-td-r">${profit}</td><td class="sc-td-r">${pct}</td>
-        </tr>`;
-    el(tableBodyId).innerHTML =
-        row('Profit Giving',profitGiving.count,formatK(profitGiving.ebit),profitPct+'%') +
-        row('Loss Giving',  lossGiving.count,  formatK(lossGiving.ebit),  lossPct+'%') +
-        row('Break-even',   breakEven.count,    formatK(0),                '0%') +
-        row('Total',        profitGiving.count+lossGiving.count+breakEven.count, formatK(totalEbit), '100%', true);
+// TOAST FUNCTION
+function showToast(message, type = "success") {
+    const existing = document.getElementById("customToast");
+    if (existing) existing.remove();
+    const toast = document.createElement("div");
+    toast.id = "customToast";
+    const bgColor = type === "success" ? "#16a34a" : "#dc2626";
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${bgColor};
+        color: white;
+        padding: 14px 22px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        z-index: 99999;
+        opacity: 0;
+        transform: translateY(-10px);
+        transition: all 0.3s ease;
+    `;
+    toast.innerHTML = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = "1";
+        toast.style.transform = "translateY(0)";
+    }, 50);
+    setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(-10px)";
+        setTimeout(() => toast.remove(), 300);
+    }, 2500);
 }
+
+async function saveWidgetToDashboard(dashboardId) {
+    try {
+        console.log("STEP 1");
+        if (!latestQberResponse || !latestQuestion) {
+            alert("No widget available to save");
+            return;
+        }
+        console.log("STEP 2");
+        const payload = {
+            dashboard_id: dashboardId,
+            question: latestQuestion,
+            summary: latestQberResponse.summary,
+            chart: latestQberResponse.chart,
+            sql_used: latestQberResponse.sql_used
+        };
+        console.log("Payload:", payload);
+        const response = await fetch('/api/save-widget', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        console.log("STEP 3");
+        const result = await response.json();
+        console.log("Backend Result:", result);
+        if (result.success) {
+            console.log("STEP 4");
+            try {
+                console.log("Trying showToast...");
+                window.parent.showToast("✓ Saved successfully", "success");
+                console.log("showToast success");
+            } catch(err) {
+                console.error("showToast failed:", err);
+            }
+            try {
+                console.log("Trying close modal...");
+                window.parent.closeSaveModal();
+                console.log("close modal success");
+            } catch(err) {
+                console.error("close modal failed:", err);
+            }
+            console.log("STEP 5");
+        }
+        else {
+            alert(result.error || "Save failed");
+        }
+
+    } catch(error) {
+        console.error("FULL ERROR:", error);
+        alert("Error saving widget");
+    }
+}
+window.saveWidgetToDashboard = saveWidgetToDashboard;
+
 
 // ─── WHALE CURVE ──────────────────────────────────────────────────────────────
 function renderWhaleCurveWithSummary(data, chartId, summaryId, label, type, payload) {

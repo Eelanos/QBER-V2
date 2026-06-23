@@ -1,3 +1,4 @@
+#app.py
 import os
 import calendar
 import pandas as pd
@@ -5,7 +6,10 @@ import numpy as np
 from dotenv import load_dotenv
 import os
 load_dotenv()
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import json
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 from auth import setup_auth
@@ -37,6 +41,27 @@ from sqlalchemy import create_engine
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///local_auth.db'
 db = SQLAlchemy(app)
 
+def get_ist_now():
+    return datetime.now(ZoneInfo("Asia/Kolkata"))
+
+class SavedWidget(db.Model):
+    __tablename__ = "saved_widgets"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(100), nullable=False)
+    dashboard_id = db.Column(db.Integer, nullable=False)
+    question = db.Column(db.Text, nullable=False)
+    summary = db.Column(db.Text, nullable=False)
+    chart_json = db.Column(db.Text, nullable=True)
+    sql_used = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=get_ist_now)
+
+class DashboardPage(db.Model):
+    __tablename__ = "dashboard_pages"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(100), nullable=False)
+    dashboard_name = db.Column(db.String(150), nullable=False)
+    created_at = db.Column(db.DateTime, default=get_ist_now)
+
 MAIN_DB_URL = (
     f"mysql+pymysql://{DB_CREDS['u']}:{DB_CREDS['p']}"
     f"@{DB_CREDS['h']}/{DB_CREDS['d']}"
@@ -64,7 +89,6 @@ matrix_engine = create_engine(
 def fetch_data(sql, params=None):
     with main_engine.connect() as conn:
         return pd.read_sql_query(text(sql), conn, params=params)
-
 
 def fetch_data_matrix(sql, params=None):
     with matrix_engine.connect() as conn:
@@ -255,6 +279,8 @@ def curve_dashboard_data():
         'product': product_chart_data,
         'customer': customer_chart_data
     })
+
+
 
 
 @app.route('/api/matrix_data', methods=['POST'])
@@ -1250,6 +1276,173 @@ def stock_month_matrix():
     except Exception as e:
         print(f"[Stock Month Matrix] ERROR: {e}")
         return jsonify({'error': str(e)})
+
+@app.route('/api/save-widget', methods=['POST'])
+def save_widget():
+    try:
+        data = request.get_json()
+        user_id = session.get("user")
+        if not user_id:
+            return jsonify({"error": "User not logged in"}), 401
+
+        question = data.get("question")
+        summary = data.get("summary")
+        chart = data.get("chart")
+        sql_used = data.get("sql_used")
+        dashboard_id = data.get("dashboard_id")
+
+        if not question or not summary or not dashboard_id:
+            return jsonify({"error": "Missing required fields"}), 400
+        widget = SavedWidget(
+            user_id=user_id,
+            dashboard_id=dashboard_id,
+            question=question,
+            summary=summary,
+            chart_json=json.dumps(chart) if chart else None,
+            sql_used=sql_used
+        )
+        db.session.add(widget)
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Widget saved successfully"
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/saved-widgets', methods=['GET'])
+def get_saved_widgets():
+    try:
+        user_id = session.get("user")
+        if not user_id:
+            return jsonify({"error": "User not logged in"}), 401
+
+        dashboard_id = request.args.get('dashboard_id')
+        query = SavedWidget.query.filter_by(user_id=user_id)
+        if dashboard_id:
+            query = query.filter_by(dashboard_id=dashboard_id)
+        widgets = query.order_by(SavedWidget.created_at.desc()).all()
+        result = []
+        for widget in widgets:
+            result.append({
+                "id": widget.id,
+                "question": widget.question,
+                "summary": widget.summary,
+                "chart": json.loads(widget.chart_json) if widget.chart_json else None,
+                "sql_used": widget.sql_used,
+                "created_at": widget.created_at.isoformat()
+            })
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/init-dashboard-system')
+def init_dashboard_system():
+    db.drop_all()
+    db.create_all()
+    return "Dashboard system initialized successfully"
+
+@app.route('/api/create-dashboard', methods=['POST'])
+def create_dashboard():
+    try:
+        data = request.get_json()
+        user_id = session.get("user")
+        if not user_id:
+            return jsonify({"error": "User not logged in"}), 401
+        dashboard_name = data.get("dashboard_name")
+        if not dashboard_name:
+            return jsonify({"error": "Dashboard name required"}), 400
+        dashboard = DashboardPage(
+            user_id=user_id,
+            dashboard_name=dashboard_name
+        )
+        db.session.add(dashboard)
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "dashboard_id": dashboard.id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/dashboards', methods=['GET'])
+def get_dashboards():
+    try:
+        user_id = session.get("user")
+
+        if not user_id:
+            return jsonify({"error": "User not logged in"}), 401
+
+        dashboards = DashboardPage.query.filter_by(user_id=user_id).all()
+        result = []
+
+        for dashboard in dashboards:
+            widget_count = SavedWidget.query.filter_by(
+                user_id=user_id,
+                dashboard_id=dashboard.id
+            ).count()
+
+            result.append({
+                "id": dashboard.id,
+                "dashboard_name": dashboard.dashboard_name,
+                "widget_count": widget_count
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/delete-dashboard/<int:dashboard_id>', methods=['DELETE'])
+def delete_dashboard(dashboard_id):
+    try:
+        user_id = session.get("user")
+        if not user_id:
+            return jsonify({"error": "User not logged in"}), 401
+        SavedWidget.query.filter_by(
+            user_id=user_id,
+            dashboard_id=dashboard_id
+        ).delete()
+        DashboardPage.query.filter_by(
+            user_id=user_id,
+            id=dashboard_id
+        ).delete()
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/delete-widget/<int:widget_id>', methods=['DELETE'])
+def delete_widget(widget_id):
+    try:
+        user_id = session.get("user")
+
+        if not user_id:
+            return jsonify({"error": "User not logged in"}), 401
+
+        widget = SavedWidget.query.filter_by(
+            id=widget_id,
+            user_id=user_id
+        ).first()
+
+        if not widget:
+            return jsonify({"error": "Widget not found"}), 404
+
+        db.session.delete(widget)
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Widget deleted successfully"
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/my-dashboard')
+def my_dashboard():
+    return render_template('my_dashboard.html')
 
 
 import ask_qber

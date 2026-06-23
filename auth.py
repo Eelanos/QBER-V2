@@ -34,6 +34,7 @@ def setup_auth(app):
     Registers the before_request auth check + login/logout routes.
     """
 
+
     # Auth check — runs before EVERY request
     @app.before_request
     def check_auth():
@@ -77,3 +78,11 @@ def setup_auth(app):
     def logout():
         session.clear()
         return redirect(url_for("login_page"))
+
+    @app.route("/api/current-user")
+    def current_user():
+        return {"user": session.get("user")}
+
+    @app.context_processor
+    def inject_user():
+        return dict(logged_in_user=session.get("user"))

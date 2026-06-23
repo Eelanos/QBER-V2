@@ -150,33 +150,121 @@ body {
     color: var(--sidebar-text);
     display: flex;
     flex-direction: column;
+    height: calc(100vh - 60px);
     flex-shrink: 0;
-    padding: 10px 0;
+    overflow: hidden;
 }
 
-.nav-menu { display: flex; flex-direction: column; height: 100%; width: 100%; }
-.nav-group { display: flex; flex-direction: column; width: 100%; }
-.nav-spacer-flex { flex-grow: 1; }
+.nav-menu {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-top: 12px;
+    overflow-y: auto;
+}
 
-/* Remove section pseudo-labels */
-.nav-group.top::before,
-.nav-group.center::before,
-.nav-group.bottom::before { display: none; }
+.nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
 
+.sidebar-section-title {
+    padding: 0 18px;
+    margin: 20px 0 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #94a3b8;
+    text-transform: uppercase;
+}
+
+.sidebar-user-wrapper {
+    padding: 10px;
+    margin-top: auto;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    background: var(--sidebar-bg);
+}
+
+.sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+
+.user-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #8B0000;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.user-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.user-name {
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.user-status {
+    color: #9ca3af;
+    font-size: 11px;
+}
+
+.user-chevron {
+    color: #94a3b8;
+    font-size: 11px;
+}
+
+.user-dropdown {
+    display: none;
+    margin-top: 8px;
+    background: #2d3e50;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.user-dropdown a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    color: white;
+    text-decoration: none;
+}
+
+.user-dropdown a:hover {
+    background: rgba(255,255,255,0.08);
+}
 .nav-item {
     background: none;
     border: none;
     color: #bdc3c7;
-    padding: 12px 25px;
+    padding: 8px 18px;
     text-align: left;
     font-family: 'DM Sans', sans-serif;
-    font-size: 0.88rem;
+    font-size: 0.82rem;
     font-weight: 500;
     cursor: pointer;
     border-left: 4px solid transparent;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     width: 100%;
     transition: background 0.2s, color 0.2s;
 }
