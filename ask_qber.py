@@ -901,6 +901,39 @@ def call_openai_sql(question: str, conversation_history: list) -> str:
 
     question_lower = question.lower()
 
+    intent = extract_query_intent(question)
+
+    if intent["analysis_type"] == "profit_risk":
+        return """
+        SELECT
+            customers,
+
+            ROUND(
+                SUM(CAST(REPLACE(sales, ',', '') AS DECIMAL(18,2))) / 10000000,
+                2
+            ) AS total_sales_cr,
+
+            ROUND(
+                SUM(CAST(REPLACE(ind_ebit, ',', '') AS DECIMAL(18,2))) / 10000000,
+                2
+            ) AS total_ebit_cr,
+
+            ROUND(
+                (
+                    SUM(CAST(REPLACE(ind_ebit, ',', '') AS DECIMAL(18,2)))
+                    /
+                    NULLIF(SUM(CAST(REPLACE(sales, ',', '') AS DECIMAL(18,2))),0)
+                ) * 100,
+                2
+            ) AS ebit_percentage
+
+        FROM pc_analysis_data
+        GROUP BY customers
+        HAVING total_ebit_cr < 0
+        ORDER BY total_ebit_cr ASC
+        LIMIT 10;
+        """
+
     # =========================
     # CONTRIBUTION QUERY
     # =========================
@@ -1142,8 +1175,6 @@ def call_openai_sql(question: str, conversation_history: list) -> str:
         "change_cr"
     ]
 
-
-
     return sql
 
 def extract_query_intent(question):
@@ -1161,6 +1192,7 @@ def extract_query_intent(question):
     ranking_keywords = ['top', 'bottom', 'highest', 'lowest', 'best', 'worst']
     trend_keywords = ['trend', 'growth', 'month over month', 'mom', 'yoy']
     comparison_keywords = ['compare', 'comparison', 'vs', 'versus']
+    profit_risk_keywords = ["pulling down profitability", "hurting profits", "profit drainer", "negative ebit", "pulling down profits", "loss making customers"]
 
     sales_present = any(x in q for x in sales_keywords)
     ebit_present = any(x in q for x in ebit_keywords)
@@ -1184,6 +1216,8 @@ def extract_query_intent(question):
         intent["analysis_type"] = "trend"
     elif any(x in q for x in ranking_keywords):
         intent["analysis_type"] = "ranking"
+    if any(x in q for x in profit_risk_keywords):
+        intent["analysis_type"] = "profit_risk"
     # Important: if multiple metrics explicitly requested, treat as comparison
     if intent["multi_metric"]:
         intent["analysis_type"] = "comparison"
@@ -1278,6 +1312,21 @@ CRITICAL SUMMARY RULES:
 6. Never state business reasons or assumptions.
 7. If the rows contain 10 records, discuss only those records.
 8. If a value is already in Crores, use it exactly as provided.
+
+PROFITABILITY RISK RULE:
+For queries like:
+- customers pulling down profitability
+- customers hurting profits
+- worst profit contributors
+- biggest profit drainers
+
+Do NOT rank by EBIT percentage alone.
+Reason: EBIT percentage becomes misleading when sales are very small.
+Instead:
+1. Calculate total EBIT
+2. Filter negative EBIT
+3. Rank by total EBIT ascending (most negative first)
+Only use EBIT % as supporting metric.
 
 If the dataset contains columns such as:
 current_year
