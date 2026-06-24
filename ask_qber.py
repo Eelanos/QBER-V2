@@ -68,10 +68,21 @@ def init(app, fetch_data):
 
             question_lower = question.lower()
 
-            if any(x in question_lower for x in ['month over month', 'month-over-month', 'mom', 'monthly growth']):
+            if any(x in question_lower for x in ['month over month', 'month-over-month', 'mom', 'MoM', 'monthly growth']):
                 result = build_mom_chart_response(rows)
+            elif any(x in question_lower for x in ['year over year', 'year-over-year', 'yoy', 'YoY']):
+                result = build_yoy_chart_response(rows)
             else:
-                result = call_openai_response(question, sql, columns, rows, conversation_history)
+                intent = extract_query_intent(question)
+                print("INTENT:", intent)
+                result = call_openai_response(
+                    question,
+                    sql,
+                    columns,
+                    rows,
+                    conversation_history,
+                    intent
+                )
 
             return jsonify({
                 "summary":   result.get("summary", ""),
@@ -965,6 +976,30 @@ def call_openai_sql(question: str, conversation_history: list) -> str:
             'OCT','NOV','DEC','JAN','FEB','MAR'
         );
         """
+    is_yoy_query = (
+            (
+                    'year over year' in question_lower or
+                    'year-over-year' in question_lower or
+                    'yoy' in question_lower
+            )
+            and
+            (
+                    'revenue' in question_lower or
+                    'sales' in question_lower
+            )
+    )
+    if is_yoy_query:
+        return """
+        SELECT
+            fy,
+            ROUND(
+                SUM(CAST(REPLACE(sales, ',', '') AS DECIMAL(18,2))) / 10000000,
+                2
+            ) AS sales_cr
+        FROM pc_analysis_data
+        GROUP BY fy
+        ORDER BY fy;
+        """
 
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
@@ -1111,8 +1146,50 @@ def call_openai_sql(question: str, conversation_history: list) -> str:
 
     return sql
 
+def extract_query_intent(question):
+    q = question.lower()
 
-def call_openai_response(question: str, sql: str, columns: list, rows: list, conversation_history: list = None) -> dict:
+    intent = {
+        "primary_metric": None,
+        "secondary_metrics": [],
+        "analysis_type": None,
+        "multi_metric": False
+    }
+    sales_keywords = ['sales', 'revenue', 'turnover']
+    ebit_keywords = ['ebit', 'profitability', 'margin', 'profit']
+    inventory_keywords = ['inventory', 'stock']
+    ranking_keywords = ['top', 'bottom', 'highest', 'lowest', 'best', 'worst']
+    trend_keywords = ['trend', 'growth', 'month over month', 'mom', 'yoy']
+    comparison_keywords = ['compare', 'comparison', 'vs', 'versus']
+
+    sales_present = any(x in q for x in sales_keywords)
+    ebit_present = any(x in q for x in ebit_keywords)
+    inventory_present = any(x in q for x in inventory_keywords)
+
+    metrics_found = []
+    if sales_present:
+        metrics_found.append("sales")
+    if ebit_present:
+        metrics_found.append("ebit")
+    if inventory_present:
+        metrics_found.append("inventory")
+    if metrics_found:
+        intent["primary_metric"] = metrics_found[0]
+    if len(metrics_found) > 1:
+        intent["secondary_metrics"] = metrics_found[1:]
+        intent["multi_metric"] = True
+    if any(x in q for x in comparison_keywords):
+        intent["analysis_type"] = "comparison"
+    elif any(x in q for x in trend_keywords):
+        intent["analysis_type"] = "trend"
+    elif any(x in q for x in ranking_keywords):
+        intent["analysis_type"] = "ranking"
+    # Important: if multiple metrics explicitly requested, treat as comparison
+    if intent["multi_metric"]:
+        intent["analysis_type"] = "comparison"
+    return intent
+
+def call_openai_response(question: str, sql: str, columns: list, rows: list, conversation_history: list = None, intent=None) -> dict:
     """
     OpenAI Call #2 — Takes SQL result data, returns summary + Chart.js config.
     Uses gpt-4o (better at reasoning and consistent JSON output).
@@ -1139,11 +1216,14 @@ def call_openai_response(question: str, sql: str, columns: list, rows: list, con
             content = msg.get("content", "")
             history_context += f"{role}: {content}\n"
 
+    intent_context = json.dumps(intent or {}, indent=2)
+
     prompt = f"""
 You are QBER, a business analytics AI for a manufacturing company.
 {history_context}
 
 User Question: {question}
+Detected Query Intent: {intent_context}
 SQL Used: {sql}
 Data Retrieved:
 Columns: {converted_columns}
@@ -1151,6 +1231,36 @@ Rows: {data_preview}
 Total Rows: {len(rows)}
 
 {CHART_RULES}
+PRIMARY METRIC & CHART RULES:
+1. Use Detected Query Intent to understand what the user wants.
+2. If query has primary_metric = sales:
+   - chart must primarily visualize sales only
+   - do NOT plot EBIT unless explicitly requested
+3. If query has primary_metric = ebit:
+   - chart must visualize EBIT only
+4. If analysis_type = ranking:
+   - use bar chart
+   - chart should focus on primary metric only
+   - avoid multi-metric chart unless user explicitly asks comparison
+5. If analysis_type = trend:
+   - use line chart
+6. If analysis_type = comparison:
+   - multiple datasets allowed
+   
+Secondary metrics may be mentioned in summary.
+If intent.multi_metric = true:
+- include multiple datasets in chart
+- dual metric charts are allowed
+
+Examples:
+sales + ebit → bar + bar OR bar + line
+sales + margin → bar + line
+Examples:
+- "top 10 customers by sales" → chart sales only
+- "top products by EBIT" → chart EBIT only
+- "compare sales and EBIT of top customers" → chart both
+- "monthly revenue trend" → sales line chart only
+VERY IMPORTANT:
 
 CRITICAL SUMMARY RULES:
 1. Use ONLY numbers present in the rows.
@@ -1289,6 +1399,63 @@ Use only values present in the data. Do not speculate on causes. Do not invent e
     raw = raw.strip()
 
     return json.loads(raw)
+
+def build_yoy_chart_response(rows):
+    labels = []
+    sales = []
+    growth = []
+    prev_sales = None
+    for row in rows:
+        fy = str(row.get("fy"))
+        sales_cr = float(row.get("sales_cr", 0))
+        labels.append(fy)
+        sales.append(round(sales_cr, 2))
+        if prev_sales is None or prev_sales == 0:
+            growth.append(None)
+        else:
+            yoy = ((sales_cr - prev_sales) / prev_sales) * 100
+            growth.append(round(yoy, 2))
+
+        prev_sales = sales_cr
+    valid_growth = [g for g in growth if g is not None]
+
+    if len(valid_growth) == 1:
+        summary = (
+            f"Revenue increased from ₹{sales[0]} Cr to ₹{sales[-1]} Cr. "
+            f"Year-over-year growth was {valid_growth[0]}%."
+        )
+    else:
+        highest_growth = max(valid_growth) if valid_growth else 0
+        lowest_growth = min(valid_growth) if valid_growth else 0
+
+        summary = (
+            f"Revenue trend shows yearly fluctuations. Sales started at ₹{sales[0]} Cr "
+            f"and ended at ₹{sales[-1]} Cr. Highest YoY growth was {highest_growth}% "
+            f"while the sharpest decline was {lowest_growth}%."
+        )
+
+    return {
+        "summary": summary,
+        "chart": {
+            "type": "combo",
+            "title": "YEAR-OVER-YEAR REVENUE GROWTH TREND",
+            "labels": labels,
+            "datasets": [
+                {
+                    "label": "Sales (₹ Cr)",
+                    "data": sales,
+                    "type": "bar",
+                    "yAxisID": "y"
+                },
+                {
+                    "label": "YoY Growth %",
+                    "data": growth,
+                    "type": "line",
+                    "yAxisID": "y1"
+                }
+            ]
+        }
+    }
 
 def build_mom_chart_response(rows):
     labels = [r['month'] for r in rows]
